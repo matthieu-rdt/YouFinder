@@ -40,7 +40,7 @@ Cette commande conserve les volumes. Ne jamais utiliser `down -v`.
 ## Recherche et limites
 
 - Jusqu’à **10 résultats**, sans pagination, dans l’ordre de pertinence retourné par YouTube. Ce n’est pas une analyse exhaustive de la plateforme.
-- Bornes de publication facultatives : jours UTC, date de fin incluse. Le quota interne utilise une autre convention : journée **Europe/Paris**.
+- Bornes de publication facultatives : début inclus à 00:00 UTC, fin du jour sélectionné incluse via une borne exclusive au lendemain à 00:00 UTC. Contrôle final sur la date issue de `videos.list` : les vidéos hors période, ou à date absente/invalide lorsqu’une borne est demandée, sont écartées. Le quota interne utilise une autre convention : journée **Europe/Paris**.
 - Titre, miniature, chaîne, publication, vues publiques, abonnés publics lorsqu’ils sont disponibles, durée fournie par l’API et liens YouTube.
 - Les abonnés sont arrondis par YouTube. Une donnée absente est indiquée comme indisponible, jamais remplacée par zéro. Un zéro fourni par l’API reste un zéro.
 - La durée API peut différer légèrement de la lecture réelle. Les directs en cours ou programmés affichent leur état, sans durée définitive.

@@ -1,7 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.dates import parse_rfc3339_utc
 
 
 class SearchParams(BaseModel):
@@ -9,8 +11,8 @@ class SearchParams(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     q: str = Field(min_length=1, max_length=200)
-    published_after: datetime | None = None
-    published_before: datetime | None = None
+    published_after: datetime | None = Field(default=None, description="Borne de publication inclusive, RFC 3339 avec fuseau, normalisée en UTC.")
+    published_before: datetime | None = Field(default=None, description="Borne de publication exclusive, RFC 3339 avec fuseau ; lendemain à 00:00 UTC pour inclure un jour entier.")
 
     min_views: int | None = Field(default=None, ge=0)
     max_subscribers: int | None = Field(default=None, ge=0)
@@ -28,9 +30,7 @@ class SearchParams(BaseModel):
     @field_validator("published_after", "published_before", mode="before")
     @classmethod
     def require_rfc3339(cls, value):
-        if isinstance(value, str) and not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})", value):
-            raise ValueError("Date RFC 3339 obligatoire.")
-        return value
+        return parse_rfc3339_utc(value) if isinstance(value, str) else value
 
     @field_validator("q", mode="before")
     @classmethod
@@ -42,12 +42,12 @@ class SearchParams(BaseModel):
     def require_timezone(cls, value: datetime | None) -> datetime | None:
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("Le fuseau horaire est obligatoire.")
-        return value
+        return value.astimezone(timezone.utc) if value is not None else None
 
     @model_validator(mode="after")
     def date_order(self):
-        if self.published_after and self.published_before and self.published_after > self.published_before:
-            raise ValueError("La date de début doit précéder la date de fin.")
+        if self.published_after and self.published_before and self.published_after >= self.published_before:
+            raise ValueError("La borne de début doit précéder strictement la borne de fin exclusive.")
         return self
 
 

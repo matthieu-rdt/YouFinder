@@ -54,10 +54,10 @@ def test_invalid_parameters_do_not_consume_quota(api, params):
 
 
 def test_dates_are_forwarded_in_utc(api):
-    response = api.get({"q": "python", "published_after": "2026-01-01T01:00:00+01:00", "published_before": "2026-01-02T23:59:59.999Z"})
+    response = api.get({"q": "python", "published_after": "2026-01-01T01:00:00+01:00", "published_before": "2026-01-03T01:00:00+01:00"})
     assert response.status_code == 200
     assert api.calls[0].url.params["publishedAfter"] == "2026-01-01T00:00:00Z"
-    assert api.calls[0].url.params["publishedBefore"] == "2026-01-02T23:59:59.999000Z"
+    assert api.calls[0].url.params["publishedBefore"] == "2026-01-03T00:00:00Z"
 
 
 @pytest.mark.parametrize("status,reason,expected,code", [
@@ -178,6 +178,13 @@ def test_invalid_limit_configuration(monkeypatch, value):
 @pytest.mark.parametrize("value", ["-1", "1.5", "1.0", "bad", "", "1e3"])
 def test_invalid_filters_do_not_consume_quota(api, name, value):
     response = api.get({"q": "test", name: value})
+    assert response.status_code == 422
+    assert not api.calls
+    assert not api.settings.quota_path.exists()
+
+
+def test_equal_exclusive_bounds_rejected_without_quota(api):
+    response = api.get({"q": "test", "published_after": "2026-06-01T00:00:00Z", "published_before": "2026-06-01T02:00:00+02:00"})
     assert response.status_code == 422
     assert not api.calls
     assert not api.settings.quota_path.exists()

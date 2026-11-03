@@ -103,3 +103,49 @@ def test_combined_filters_counts_and_call_budget(api):
     assert body["searches_remaining"] == 19
     assert len(api.calls) == 3
     assert "min_views" not in api.calls[0].url.params
+
+
+@pytest.mark.parametrize("omit_invalid", [False, True])
+def test_reported_date_regression_final_dates_counts_and_budget(api, omit_invalid):
+    import json
+    dates = {
+        "november": "2026-11-03T12:00:00Z", "last": "2026-07-07T23:59:59.999999Z",
+        "before": "2026-05-31T23:59:59Z", "first": "2026-06-01T00:00:00Z",
+        "next": "2026-07-08T00:00:00Z", "middle": "2026-06-15T12:00:00Z",
+        "missing": None, "invalid": "bad", "few-views": "2026-06-15T00:00:00Z",
+        "short": "2026-06-15T00:00:00Z",
+    }
+    def handler(request):
+        endpoint = request.url.path.rsplit("/", 1)[-1]
+        if endpoint == "search":
+            # Données simulées : search et videos peuvent contenir des dates différentes.
+            items = [{"id": {"videoId": id}, "snippet": {"publishedAt": "2026-06-15T00:00:00Z"}} for id in dates]
+        elif endpoint == "videos":
+            items = []
+            for id, published in reversed(list(dates.items())):
+                if omit_invalid and id == "invalid":
+                    continue
+                item = video(id, statistics={"viewCount": "9999" if id == "few-views" else "10000"}, contentDetails={"duration": "PT2M59S" if id == "short" else "PT3M"})
+                item["snippet"]["publishedAt"] = published
+                items.append(item)
+        else:
+            items = [{"id": "channel-one", "statistics": {"hiddenSubscriberCount": True}}]
+        return httpx.Response(200, json={"items": items, "nextPageToken": "ignored"})
+    api.handler = handler
+    response = api.get({"q": "test", "published_after": "2026-06-01T00:00:00Z", "published_before": "2026-07-08T00:00:00Z", "min_views": 10000, "min_duration_minutes": 3})
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["id"] for item in body["items"]] == ["last", "first", "middle"]
+    assert body["examined_count"] == 10 - int(omit_invalid)
+    assert body["retained_count"] == 3
+    assert body["filtered_out_count"] == 7 - int(omit_invalid)
+    assert body["omitted_count"] == int(omit_invalid)
+    assert body["searches_remaining"] == 19
+    assert json.loads(api.settings.quota_path.read_text())["count"] == 1
+    assert len(api.calls) == 3
+    query = api.calls[0].url.params
+    assert query["publishedAfter"] == "2026-06-01T00:00:00Z"
+    assert query["publishedBefore"] == "2026-07-08T00:00:00Z"
+    assert query["maxResults"] == "10"
+    assert query["order"] == "relevance"
+    assert "pageToken" not in query

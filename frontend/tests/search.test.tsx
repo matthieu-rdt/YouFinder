@@ -52,7 +52,7 @@ describe("Recherche", () => {
     expect(url.searchParams.has("max_subscribers")).toBe(false);
     expect(url.searchParams.has("min_duration_minutes")).toBe(false);
     expect(url.searchParams.get("published_after")).toBe("2026-01-01T00:00:00Z");
-    expect(url.searchParams.get("published_before")).toBe("2026-02-01T23:59:59.999Z");
+    expect(url.searchParams.get("published_before")).toBe("2026-02-02T00:00:00Z");
     expect(fetchMock.mock.calls[0][1]).toEqual({ cache: "no-store" });
     expect(screen.getAllByRole("heading").map(node => node.textContent)).toEqual(["Titre simulé", "Deuxième résultat"]);
     expect(screen.getAllByText("Indisponible")).toHaveLength(2);
@@ -143,4 +143,23 @@ it.each(["-1", "1.5"])("refuse un filtre invalide : %s", value => {
   fireEvent.submit(form);
   expect(screen.getByRole("alert")).toBeVisible();
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+
+it.each(["2026-07-07", "2026-06-01"])("sérialise la période inclusive du 01/06/2026 au %s avec les autres filtres", async end => {
+  const {form, fetchMock} = setup(vi.fn().mockResolvedValue({ok: true, json: async () => ({items: [], examined_count: 10, retained_count: 0, filtered_out_count: 10, omitted_count: 0, daily_limit: 20, searches_remaining: 19, notice: "Recherche non exhaustive."})}));
+  accept();
+  fireEvent.change(screen.getByLabelText("Publié à partir du (UTC)"), {target: {value: "2026-06-01"}});
+  fireEvent.change(screen.getByLabelText("Publié jusqu’au (UTC, jour inclus)"), {target: {value: end}});
+  fireEvent.change(screen.getByLabelText("Vues minimum"), {target: {value: "10000"}});
+  fireEvent.change(screen.getByLabelText("Durée minimum (minutes)"), {target: {value: "3"}});
+  fireEvent.submit(form);
+  expect(await screen.findByText(/Aucune vidéo ne correspond/)).toBeVisible();
+  const params = new URL(fetchMock.mock.calls[0][0], "http://test").searchParams;
+  expect(params.get("published_after")).toBe("2026-06-01T00:00:00Z");
+  expect(params.get("published_before")).toBe(end === "2026-07-07" ? "2026-07-08T00:00:00Z" : "2026-06-02T00:00:00Z");
+  expect(params.get("min_views")).toBe("10000");
+  expect(params.get("min_duration_minutes")).toBe("3");
+  expect(params.has("max_subscribers")).toBe(false);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
 });

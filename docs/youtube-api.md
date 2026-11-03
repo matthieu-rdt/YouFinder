@@ -6,13 +6,17 @@ Date : 2026-11-02. Périmètre validé : recherche personnelle, dix résultats, 
 
 Navigateur → Next.js `/api/*` → FastAPI → `https://www.googleapis.com/youtube/v3/`.
 
-`GET /api/videos/search?q=python&published_after=2026-01-01T00:00:00Z&published_before=2026-02-01T23:59:59.999Z`
+`GET /api/videos/search?q=python&published_after=2026-01-01T00:00:00Z&published_before=2026-02-02T00:00:00Z`
 
-`q` est obligatoire (1–200 caractères après suppression des espaces périphériques). Les dates doivent être RFC 3339 avec fuseau horaire et ordonnées. Les paramètres supplémentaires sont refusés. L’interface utilise des jours UTC avec fin de journée incluse. Aucun appel au montage de la page : seul le gestionnaire de soumission déclenche `fetch`, avec `cache: no-store`. Le backend ajoute `Cache-Control: no-store` aux réponses de recherche.
+`q` est obligatoire (1–200 caractères après suppression des espaces périphériques). Les dates doivent être RFC 3339 avec fuseau horaire, normalisées en UTC. `published_after` est inclusif et `published_before` exclusif ; si les deux bornes sont présentes, le début doit strictement précéder la fin. Les paramètres supplémentaires sont refusés. L’interface inclut entièrement les jours UTC sélectionnés en envoyant le début à 00:00 UTC et le lendemain du dernier jour à 00:00 UTC comme fin exclusive. Aucun appel au montage de la page : seul le gestionnaire de soumission déclenche `fetch`, avec `cache: no-store`. Le backend ajoute `Cache-Control: no-store` aux réponses de recherche.
 
 1. `search.list(part=snippet,type=video,maxResults=10,order=relevance,q=...)`, avec les dates éventuelles.
 2. `videos.list(part=snippet,statistics,contentDetails,id=...)` pour tous les identifiants de cette page.
 3. `channels.list(part=statistics,id=...)` pour les identifiants de chaînes dédupliqués.
+
+Après enrichissement, le backend contrôle `videos.list.snippet.publishedAt` dans l’intervalle `[published_after, published_before[`, avant les autres critères. Les dates absentes, invalides ou sans fuseau sont exclues si une borne est active, et restent disponibles sans contrainte de période. Les exclusions temporelles font partie de `filtered_out_count`, sans modifier `omitted_count` (vidéos indisponibles), ni le nombre d’appels. `examined_count` reste le nombre de vidéos enrichies avant tous les filtres.
+
+Google documente `publishedBefore` comme « avant ou à » la borne. Nous transmettons la borne du lendemain à la recherche et imposons strictement l’exclusion de cet instant au contrôle final. Les bornes de recherche sont décrites comme portant sur la création des ressources ; `videos.list.snippet.publishedAt` décrit la publication, pouvant différer du téléversement. Nous n’inférons pas une égalité entre les dates des deux ressources et ne remplaçons pas la date enrichie par celle de recherche.
 
 Pas de suivi de `nextPageToken`, pas d’appel par vidéo ou par chaîne. Pas d’enrichissement si la recherche est vide. L’assemblage préserve l’ordre initial de recherche, même si Google retourne les détails dans un ordre différent. Les vidéos absentes de `videos.list` sont omises et comptées dans `omitted_count`. Un échec d’enrichissement rend une erreur explicite et non un faux résultat vide.
 

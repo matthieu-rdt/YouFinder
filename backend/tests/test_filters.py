@@ -57,3 +57,53 @@ def test_and_order_and_large_integers():
     assert filter_videos([first, rejected, last], params) == [first, last]
     missing = sample(view_count=None, subscriber_count=None, duration_iso=None)
     assert filter_videos([missing], SearchParams(q="test")) == [missing]
+
+
+@pytest.mark.parametrize("published,expected", [
+    ("2026-05-31T23:59:59Z", False),
+    ("2026-06-01T00:00:00Z", True),
+    ("2026-06-15T12:00:00Z", True),
+    ("2026-07-07T23:59:59Z", True),
+    ("2026-07-07T23:59:59.999999Z", True),
+    ("2026-07-08T00:00:00Z", False),
+    ("2026-11-03T12:00:00Z", False),
+    ("2026-06-01T02:00:00+02:00", True),
+    ("2026-07-08T02:00:00+02:00", False),
+    ("2026-06-01T00:30:00+02:00", False),
+    (None, False), ("invalid", False), ("2026-06-15", False),
+    ("2026-06-15T12:00:00", False), ("2026-06-31T12:00:00Z", False),
+])
+def test_enriched_publication_period(published, expected):
+    params = SearchParams(q="test", published_after="2026-06-01T00:00:00Z", published_before="2026-07-08T00:00:00Z", min_views=1000, min_duration_minutes=3)
+    assert bool(filter_videos([sample(published_at=published)], params)) is expected
+
+
+@pytest.mark.parametrize("bounds,published,expected", [
+    ({"published_after": "2026-06-01T00:00:00Z"}, "2026-11-03T12:00:00Z", True),
+    ({"published_after": "2026-06-01T00:00:00Z"}, "2026-05-31T23:59:59Z", False),
+    ({"published_before": "2026-07-08T00:00:00Z"}, "2026-05-31T23:59:59Z", True),
+    ({"published_before": "2026-07-08T00:00:00Z"}, "2026-07-08T00:00:00Z", False),
+    ({"published_before": "2026-07-08T00:00:00Z"}, None, False),
+    ({"published_after": "2026-06-01T00:00:00Z"}, "bad", False),
+    ({}, None, True), ({}, "bad", True),
+])
+def test_single_bound_and_no_period(bounds, published, expected):
+    assert bool(filter_videos([sample(published_at=published)], SearchParams(q="test", **bounds))) is expected
+
+
+def test_search_dates_are_timezone_aware_and_normalized_to_utc():
+    from datetime import timezone
+    params = SearchParams(q="test", published_after="2026-06-01T02:00:00+02:00", published_before="2026-07-08T02:00:00+02:00")
+    assert params.published_after.tzinfo is timezone.utc
+    assert params.published_before.tzinfo is timezone.utc
+    assert params.published_after.isoformat() == "2026-06-01T00:00:00+00:00"
+
+
+def test_dates_and_metrics_require_all_conditions():
+    params = SearchParams(q="test", published_after="2026-06-01T00:00:00Z", published_before="2026-07-08T00:00:00Z", min_views=10000, min_duration_minutes=3)
+    matching = sample(published_at="2026-06-15T00:00:00Z", view_count="10000", duration_iso="PT3M")
+    assert filter_videos([
+        matching, matching.model_copy(update={"view_count": "9999"}),
+        matching.model_copy(update={"duration_iso": "PT2M59S"}),
+        matching.model_copy(update={"published_at": "2026-11-03T00:00:00Z"}),
+    ], params) == [matching]

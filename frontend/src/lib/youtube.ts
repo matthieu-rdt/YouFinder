@@ -36,3 +36,15 @@ export function formatDate(value: string | null): string {
   if (!value || Number.isNaN(Date.parse(value))) return "Indisponible";
   return new Date(value).toLocaleDateString("fr-FR", { timeZone: "UTC" });
 }
+
+
+export function nextUtcDayStart(day: string): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(day) || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== day) {
+    throw new Error("Jour UTC invalide.");
+  }
+  date.setUTCDate(date.getUTCDate() + 1);
+  const result = date.toISOString().replace(".000Z", "Z");
+  if (!/^[0-9]{4}-/.test(result)) throw new Error("Borne UTC hors limites.");
+  return result;
+}

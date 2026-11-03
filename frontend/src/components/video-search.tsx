@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
-import type { SearchResponse } from "../lib/youtube";
+import { nextUtcDayStart, type SearchResponse } from "../lib/youtube";
 import { VideoCard } from "./video-card";
 
 export function VideoSearch() {
@@ -26,7 +26,14 @@ export function VideoSearch() {
     }
     const params = new URLSearchParams({ q });
     if (after) params.set("published_after", `${after}T00:00:00Z`);
-    if (before) params.set("published_before", `${before}T23:59:59.999Z`);
+    if (before) {
+      try {
+        params.set("published_before", nextUtcDayStart(before));
+      } catch {
+        setError("Saisissez une date de fin UTC valide.");
+        return;
+      }
+    }
     for (const name of ["min_views", "max_subscribers", "min_duration_minutes"]) {
       const value = String(form.get(name) ?? "");
       if (value && !/^[0-9]+$/.test(value)) {
