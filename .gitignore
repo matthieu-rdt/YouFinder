@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.npm-cache/
+.next/
+next-env.d.ts
+coverage/
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.egg-info/
+.DS_Store
+.obsidian/
+backend/.state/
