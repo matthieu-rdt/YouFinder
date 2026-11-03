@@ -118,3 +118,38 @@ Les tests couvrent les seuils inclusifs, zéro, valeurs absentes/inexploitables,
 Limites : le premier essai Python système a échoué faute de HTTPX ; il a été remplacé par l’environnement temporaire ci-dessus. Docker refuse l’accès à son socket, y compris après tentative autorisée ; tests dans les images et chemin Compose non vérifiés. Le build Turbopack par défaut reste à vérifier avec des dépendances locales à sa racine. Aucun test visuel dans un navigateur, aucune requête Google réelle ni validation de clé/quota réel. Python de test 3.11.2, et non 3.13.18 des images.
 
 Aucun nouveau package dans les manifestes ou lockfiles, modification de quota, appel YouTube supplémentaire, déploiement, accès OVH ou modification/suppression de volume Docker. Aucun secret lu ou affiché. Les résultats demeurent limités aux dix premiers résultats par pertinence ; les compteurs ne mesurent pas un potentiel de niche.
+
+
+## Correction du filtre de dates — 2026-11-03
+
+Diagnostic : absence de contrôle temporel sur `videos.list.snippet.publishedAt` après enrichissement. Reproduction simulée avant correction : vidéo de novembre retenue pour juin/juillet ; après correction : exclue. La présence initiale de l’identifiant dans la réponse réelle n’est pas expliquée sans les échanges HTTP d’origine.
+
+Vérifications réellement exécutées :
+
+- `/tmp/youfinder-venv/bin/python -m pytest backend -q` : **116 tests réussis**, Python 3.11.2.
+- `npm test` depuis `frontend/` avec Node 24.22.2 ARM64 : **27 tests réussis dans 4 fichiers**.
+- `npm run typecheck` : **réussi** dans une copie temporaire isolée avec dépendances locales. Premier essai de cette copie en échec à cause des liens d’exécutables déréférencés ; restauration des liens dans la copie puis réussite.
+- `npm run build` : **réussi avec Turbopack**, dans cette même copie, sans modifier le cache du projet en cours.
+- `git diff --check` : réussi.
+
+Couverture : bornes UTC inclusives/exclusives, période du 01/06/2026 au 07/07/2026, dates enrichies hors période, inconnues ou invalides, fuseaux, filtres combinés, paramètres Google, ordre, compteurs et trois appels groupés pour une seule tentative réservée. Aucun appel Google réel ni essai visuel navigateur. Aucun essai Compose pendant cette correction, aucun volume modifié, accès OVH ou déploiement. Rapport détaillé : [[codex-reports/fix-date-filter]].
+
+
+## Recette manuelle — Filtres avancés et dates UTC
+
+**Source : vérifications manuelles rapportées par l’utilisateur**, après application dans Docker Compose du correctif décrit dans [le rapport de correction](codex-reports/fix-date-filter.md). L’incident de référence est [« Filtrage temporel incomplet après enrichissement — 2026-11-03 »](incidents.md#filtrage-temporel-incomplet-après-enrichissement--2026-11-03).
+
+Environnement rapporté : Debian 12 ARM64 sous UTM, Docker Compose v2, frontend Next.js et backend FastAPI. Accès depuis un navigateur macOS via `localhost:3000`.
+
+Plusieurs recherches similaires ont été effectuées manuellement après correction. **Aucune nouvelle incohérence de dates n’a été observée. La validation fonctionnelle manuelle est satisfaisante sur les recherches effectuées.** Le nombre exact de recherches, les mots-clés et les résultats précis ne sont pas consignés.
+
+**Tests automatisés rapportés par Codex :** les résultats pytest, Vitest, TypeScript et build restent ceux déjà consignés ci-dessus et dans [le rapport de phase 3](codex-reports/phase-03.md) et [le rapport du correctif](codex-reports/fix-date-filter.md). Ils sont distincts de cette recette utilisateur ; aucune nouvelle exécution ni aucun nouveau résultat automatisé ne sont ajoutés ici.
+
+**Vérifications non effectuées ou non attestées :**
+
+- Aucun test automatisé, build ou nouvelle recherche YouTube n’a été lancé par Codex pour cette mise à jour documentaire ; aucun quota Google consommé par cette tâche.
+- Ce compte rendu utilisateur n’atteste pas d’une exécution des suites automatisées dans les conteneurs Docker.
+- Toutes les combinaisons de filtres et tous les cas limites n’ont pas fait l’objet d’une recette manuelle exhaustive. Cette observation ne vaut pas validation exhaustive de YouFinder.
+- L’origine exacte de la présence de l’identifiant dans la réponse de recherche initiale reste non établie, comme indiqué dans le rapport du correctif.
+
+Les limites historiques ci-dessus décrivent les vérifications effectuées par Codex à leur date ; cette recette utilisateur les complète sans les remplacer.
