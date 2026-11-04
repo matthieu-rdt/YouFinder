@@ -39,19 +39,23 @@ Cette commande conserve les volumes. Ne jamais utiliser `down -v`.
 
 ## Recherche et limites
 
-- Jusqu’à **10 résultats**, sans pagination, dans l’ordre de pertinence retourné par YouTube. Ce n’est pas une analyse exhaustive de la plateforme.
+- Jusqu’à **deux pages de 50 identifiants**, soit 100 au maximum, chargées manuellement, dans l’ordre de pertinence retourné par YouTube. Ce n’est pas une analyse exhaustive de la plateforme.
 - Bornes de publication facultatives : début inclus à 00:00 UTC, fin du jour sélectionné incluse via une borne exclusive au lendemain à 00:00 UTC. Contrôle final sur la date issue de `videos.list` : les vidéos hors période, ou à date absente/invalide lorsqu’une borne est demandée, sont écartées. Le quota interne utilise une autre convention : journée **Europe/Paris**.
 - Titre, miniature, chaîne, publication, vues publiques, abonnés publics lorsqu’ils sont disponibles, durée fournie par l’API et liens YouTube.
 - Les abonnés sont arrondis par YouTube. Une donnée absente est indiquée comme indisponible, jamais remplacée par zéro. Un zéro fourni par l’API reste un zéro.
 - La durée API peut différer légèrement de la lecture réelle. Les directs en cours ou programmés affichent leur état, sans durée définitive.
-- Une recherche peut renvoyer moins de dix vidéos. Les vidéos disparues entre recherche et enrichissement sont omises avec un avertissement.
+- Une recherche peut renvoyer moins de cinquante vidéos par page. Les vidéos disparues entre recherche et enrichissement sont omises avec un avertissement.
 - Filtres facultatifs combinés par ET : vues minimum, abonnés publics maximum, durée minimum en minutes entières. Zéro est un seuil explicite ; un champ vide désactive le filtre.
 - Les seuils sont inclusifs. Une donnée manquante ou inexploitable exclut la vidéo uniquement si le filtre correspondant est actif. Les abonnés masqués sont exclus avec le filtre abonnés ; les directs en cours et programmés avec le filtre durée.
 - Le nombre public d’abonnés est arrondi vers le bas à trois chiffres significatifs par YouTube : le filtre ne garantit pas un plafond sur le nombre réel exact, qui n’est jamais reconstruit.
-- Affichage des vidéos examinées, retenues, écartées et des vidéos indisponibles omises. Seuls les dix premiers résultats de pertinence sont filtrés, sans remplacement des exclusions : un résultat vide ne démontre pas l’absence de vidéos correspondantes sur YouTube.
+- Affichage des pages chargées, vidéos examinées, retenues, écartées et indisponibles omises. Les compteurs sont cumulés par page et distincts du nombre de vidéos uniques affichées. Les pages consultées sont filtrées sans remplacement des exclusions : un résultat vide ne démontre pas l’absence de vidéos correspondantes sur YouTube.
 - Les critères restent dans le formulaire après résultat ou erreur, jusqu’au rechargement de la page. Aucun filtre Shorts, tri local ou métrique analytique dérivée.
 
-Le plafond interne vaut **20 tentatives par jour**, partagé par toute l’application et configurable avec `YOUTUBE_DAILY_SEARCH_LIMIT` (entier positif ou nul ; zéro bloque les recherches). Chaque tentative réservée avant l’appel Google reste comptée, même si Google renvoie une erreur ou si la connexion échoue. Les entrées invalides et l’absence de clé ne consomment rien. Aucun retry automatique, aucune recherche à chaque frappe.
+La première soumission charge une page de 50 résultats maximum. Le bouton **« Charger 50 vidéos supplémentaires »** permet une seule continuation, sans appel automatique. Les résultats précédents sont conservés et les doublons par identifiant masqués en préservant la première occurrence. Une page entièrement filtrée peut avoir une suite. Après la deuxième page, le parcours s’arrête même si YouTube propose encore un jeton.
+
+La continuation utilise les critères de la recherche soumise ; modifier les champs ne les applique qu’à une nouvelle soumission. Celle-ci réinitialise liste, jetons et compteurs. Une erreur de deuxième page conserve les résultats et compteurs acquis ; un échec réseau peut avoir consommé une tentative, et le dernier solde affiché peut être périmé. Une reprise transitoire reste manuelle, tandis qu’un jeton invalide ou un quota épuisé bloque la continuation.
+
+Le plafond interne vaut **20 tentatives par jour**, partagé par toute l’application et configurable avec `YOUTUBE_DAILY_SEARCH_LIMIT` (entier positif ou nul ; zéro bloque les recherches). Chaque page demandée réserve une tentative. Chaque tentative réservée avant l’appel Google reste comptée, même si Google renvoie une erreur ou si la connexion échoue. Les entrées invalides et l’absence de clé ne consomment rien. Aucun retry automatique, aucune recherche à chaque frappe.
 
 Le compteur contient uniquement une date et un nombre, dans `backend/.state/search-quota.json`, protégé par verrou Linux et écriture atomique. Il survit aux rechargements et recréations des conteneurs grâce au montage existant `./backend:/app`, sans nouveau volume Docker. Il est ignoré par Git et exclu du contexte de build. En cas de corruption ou d’accès impossible, la recherche est bloquée. Ne pas supprimer ce dossier pour contourner le plafond. Ce mécanisme vise une installation locale unique sur système de fichiers local, pas plusieurs serveurs indépendants.
 

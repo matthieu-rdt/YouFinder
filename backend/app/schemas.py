@@ -14,6 +14,9 @@ class SearchParams(BaseModel):
     published_after: datetime | None = Field(default=None, description="Borne de publication inclusive, RFC 3339 avec fuseau, normalisée en UTC.")
     published_before: datetime | None = Field(default=None, description="Borne de publication exclusive, RFC 3339 avec fuseau ; lendemain à 00:00 UTC pour inclure un jour entier.")
 
+    page_token: str | None = Field(default=None, min_length=1, max_length=2048)
+    page_signature: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
     min_views: int | None = Field(default=None, ge=0)
     max_subscribers: int | None = Field(default=None, ge=0)
     min_duration_minutes: int | None = Field(default=None, ge=0)
@@ -46,6 +49,8 @@ class SearchParams(BaseModel):
 
     @model_validator(mode="after")
     def date_order(self):
+        if (self.page_token is None) != (self.page_signature is None):
+            raise ValueError("Le jeton et sa signature doivent être fournis ensemble.")
         if self.published_after and self.published_before and self.published_after >= self.published_before:
             raise ValueError("La borne de début doit précéder strictement la borne de fin exclusive.")
         return self
@@ -70,10 +75,13 @@ class Video(BaseModel):
 
 class SearchResponse(BaseModel):
     items: list[Video]
+    next_page_token: str | None = None
+    next_page_signature: str | None = None
+    page_number: int
     omitted_count: int = 0
     examined_count: int
     retained_count: int
     filtered_out_count: int
     daily_limit: int
     searches_remaining: int
-    notice: str = "Filtrage des 10 premiers résultats maximum par pertinence, sans pagination ni remplacement des vidéos écartées. Ces résultats ne représentent pas une analyse exhaustive de YouTube."
+    notice: str = "Deux pages de 50 résultats maximum par pertinence, chargées manuellement, sans remplacement des vidéos écartées. Ces résultats ne représentent pas une analyse exhaustive de YouTube."

@@ -153,3 +153,53 @@ Plusieurs recherches similaires ont été effectuées manuellement après correc
 - L’origine exacte de la présence de l’identifiant dans la réponse de recherche initiale reste non établie, comme indiqué dans le rapport du correctif.
 
 Les limites historiques ci-dessus décrivent les vérifications effectuées par Codex à leur date ; cette recette utilisateur les complète sans les remplacer.
+
+## Phase 4 — pagination manuelle — 2026-11-04
+
+Branche vérifiée avant modification : `feat/youtube-pagination`. Aucune modification de `main`, aucun commit créé.
+
+Vérifications réellement exécutées :
+
+| Commande / environnement | Résultat |
+| --- | --- |
+| `python3 -m pytest backend -q`, Python système | Échec au chargement : HTTPX absent |
+| `/tmp/youfinder-venv/bin/python -m pytest backend -q` après installation du lockfile existant dans ce venv | **145 tests réussis**, Python 3.11.2 |
+| `npm test` depuis `frontend/`, Node 24.22.2 ARM64 | **44 tests réussis dans 4 fichiers** |
+| `npm run typecheck` dans `/tmp/youfinder-phase4-frontend` | **Réussi** après correction d’un type de mock Vitest dans les nouveaux tests |
+| `npm run build` avec Turbopack dans cette première copie temporaire | Échec : dépendances liées hors de la racine de résolution |
+| `npm run build` avec Turbopack dans `.phase4-validation`, copie isolée avec dépendances copiées et liens internes préservés | **Réussi**, compilation, TypeScript et génération statique |
+| `git diff --check` | Réussi |
+
+Les dépendances installées viennent du lockfile existant ; aucun manifeste ni lockfile modifié. La copie de build dans le workspace a été utilisée faute d’espace suffisant dans `/tmp` pour y dupliquer les dépendances ; elle est supprimée après vérification. Aucun cache `.next` du frontend en cours n’a été modifié par le build ou le typecheck.
+
+Couverture simulée ajoutée : deux pages de 50, absence de préchargement, limite de 100 identifiants, enrichissements groupés et ordre, doublons intra-page et entre pages, pages entièrement filtrées, dates UTC et filtres conservés, critères instantanés puis réinitialisés, jetons absents/invalides/répétés, signature de continuation, refus d’un jeton associé à d’autres critères ou d’une troisième page, quota épuisé, erreurs réseau/Google, doubles clics, conservation des résultats et reprise manuelle, validation d’une réponse avant fusion. Les tests HTTPX interceptent Google, et les tests Vitest remplacent `fetch` : aucun quota YouTube réel consommé.
+
+Limites des vérifications Codex lors de l’implémentation : pas d’exécution dans les images Compose, Python 3.11.2 au lieu du 3.13.18 des images, pas de recette visuelle navigateur ni d’appel YouTube réel. Les quotas du projet Google ne sont pas inspectés. La consultation des références officielles ne constitue pas un essai de recherche YouTube. Aucun changement OVH, volume Docker ou déploiement.
+
+Recette initialement prévue avant le retour utilisateur consigné ci-dessous : formulaire et consentement, chargement initial puis bouton « Charger 50 vidéos supplémentaires », conservation visuelle pendant chargement/erreur, nombres cumulés et uniques, changement de critères, affichage mobile et accessibilité, suites dans l’environnement Compose habituel. Tout essai connecté YouTube consommerait du quota et nécessite une autorisation distincte.
+
+
+## Clôture de la phase 4 — recette manuelle rapportée par l’utilisateur
+
+**Statut : phase 4 clôturée sur la base de la validation manuelle déclarée par l’utilisateur.**
+
+Environnement rapporté : application exécutée sous Docker Compose sur Debian 12 ARM64, consultée dans un navigateur macOS. L’utilisateur déclare les **huit scénarios de recette réussis**. Le détail individuel de ces huit scénarios n’est pas fourni dans ce compte rendu ; aucune liste de scénarios supplémentaires ni couverture exhaustive n’est déduite.
+
+Valeurs de la capture telles que rapportées par l’utilisateur (capture non examinée directement pour cette mise à jour) :
+
+| Indicateur | Valeur rapportée |
+| --- | --- |
+| Pages chargées | 2 sur 2 maximum |
+| Vidéos examinées, cumul des pages | 100 |
+| Résultats retenus, cumul des pages | 33 |
+| Résultats écartés, cumul des pages | 67 |
+| Vidéos uniques affichées | 29 |
+| Tentatives quotidiennes restantes | 9 sur 20 |
+
+Les compteurs cumulés sont distincts du nombre de vidéos uniques affichées : 33 résultats retenus correspondent ici à 29 vidéos uniques après déduplication. Les 9 tentatives restantes constituent le solde rapporté au moment de la capture ; elles ne permettent pas d’attribuer toute la consommation quotidienne à ce seul parcours.
+
+**Validation automatisée précédemment rapportée par Codex :** 145 tests backend réussis, 44 tests frontend réussis dans 4 fichiers, vérification TypeScript et build Turbopack réussis, dans les environnements et avec les limites déjà consignés. Ces résultats restent historiques et distincts de la recette manuelle ; aucune suite de tests ni aucun build n’a été relancé pour cette clôture documentaire.
+
+La recette navigateur sous Compose complète les vérifications précédentes. Elle n’atteste pas d’une exécution des suites automatisées ou du build dans les conteneurs, ni d’une vérification individuelle de tous les points de la liste de recette initiale (notamment mobile et accessibilité). Les mentions antérieures de recette restante décrivent l’état avant ce retour utilisateur ; la recette des huit scénarios est désormais déclarée réussie. Les limites techniques documentées restent applicables.
+
+Cette mise à jour porte uniquement sur les deux documents de validation et de rapport de phase 4. Aucune nouvelle recherche YouTube, aucun test supplémentaire, aucun commit Git ni déploiement n’a été effectué par Codex pour cette tâche.

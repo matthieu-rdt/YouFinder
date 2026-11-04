@@ -38,7 +38,7 @@ describe("Recherche", () => {
   it("envoie les dates UTC et affiche les résultats dans l’ordre reçu", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({
       items: [video, { ...video, id: "second", title: "Deuxième résultat" }],
-      searches_remaining: 19, daily_limit: 20, omitted_count: 1, examined_count: 2, retained_count: 2, filtered_out_count: 0, notice: "Recherche non exhaustive.",
+      searches_remaining: 19, daily_limit: 20, omitted_count: 1, examined_count: 2, retained_count: 2, filtered_out_count: 0, next_page_token: null, next_page_signature: null, page_number: 1, notice: "Recherche non exhaustive.",
     }) });
     const { form } = setup(fetchMock);
     accept();
@@ -64,7 +64,7 @@ describe("Recherche", () => {
   });
 
   it("affiche les résultats vides", async () => {
-    const { form } = setup(vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items: [], searches_remaining: 19, daily_limit: 20, omitted_count: 0, examined_count: 0, retained_count: 0, filtered_out_count: 0, notice: "Recherche non exhaustive." }) }));
+    const { form } = setup(vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items: [], searches_remaining: 19, daily_limit: 20, omitted_count: 0, examined_count: 0, retained_count: 0, filtered_out_count: 0, next_page_token: null, next_page_signature: null, page_number: 1, notice: "Recherche non exhaustive." }) }));
     accept();
     fireEvent.submit(form);
     expect(await screen.findByText(/Aucune vidéo ne correspond/)).toBeVisible();
@@ -111,14 +111,14 @@ describe("Recherche", () => {
     fireEvent.submit(form);
     expect(screen.getByRole("button")).toBeDisabled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    await act(async () => resolve({ ok: true, json: async () => ({ items: [], daily_limit: 20, searches_remaining: 19, omitted_count: 0, examined_count: 0, retained_count: 0, filtered_out_count: 0, notice: "Recherche non exhaustive." }) }));
+    await act(async () => resolve({ ok: true, json: async () => ({ items: [], daily_limit: 20, searches_remaining: 19, omitted_count: 0, examined_count: 0, retained_count: 0, filtered_out_count: 0, next_page_token: null, next_page_signature: null, page_number: 1, notice: "Recherche non exhaustive." }) }));
     await waitFor(() => expect(screen.getByRole("button")).toBeEnabled());
   });
 });
 
 
 it("transmet les filtres combinés sans perte de précision et les conserve après résultat vide et erreur", async () => {
-  const fetchMock = vi.fn().mockResolvedValueOnce({ok: true, json: async () => ({items: [], examined_count: 10, retained_count: 0, filtered_out_count: 10, omitted_count: 0, daily_limit: 20, searches_remaining: 19, notice: "Recherche non exhaustive."})}).mockRejectedValueOnce(new Error("offline"));
+  const fetchMock = vi.fn().mockResolvedValueOnce({ok: true, json: async () => ({items: [], examined_count: 10, retained_count: 0, filtered_out_count: 10, omitted_count: 0, daily_limit: 20, searches_remaining: 19, next_page_token: null, next_page_signature: null, page_number: 1, notice: "Recherche non exhaustive."})}).mockRejectedValueOnce(new Error("offline"));
   const {form} = setup(fetchMock);
   accept();
   const values = [["Vues minimum", "9007199254740993"], ["Abonnés maximum", "0"], ["Durée minimum (minutes)", "10"]];
@@ -147,7 +147,7 @@ it.each(["-1", "1.5"])("refuse un filtre invalide : %s", value => {
 
 
 it.each(["2026-07-07", "2026-06-01"])("sérialise la période inclusive du 01/06/2026 au %s avec les autres filtres", async end => {
-  const {form, fetchMock} = setup(vi.fn().mockResolvedValue({ok: true, json: async () => ({items: [], examined_count: 10, retained_count: 0, filtered_out_count: 10, omitted_count: 0, daily_limit: 20, searches_remaining: 19, notice: "Recherche non exhaustive."})}));
+  const {form, fetchMock} = setup(vi.fn().mockResolvedValue({ok: true, json: async () => ({items: [], examined_count: 10, retained_count: 0, filtered_out_count: 10, omitted_count: 0, daily_limit: 20, searches_remaining: 19, next_page_token: null, next_page_signature: null, page_number: 1, notice: "Recherche non exhaustive."})}));
   accept();
   fireEvent.change(screen.getByLabelText("Publié à partir du (UTC)"), {target: {value: "2026-06-01"}});
   fireEvent.change(screen.getByLabelText("Publié jusqu’au (UTC, jour inclus)"), {target: {value: end}});
@@ -162,4 +162,176 @@ it.each(["2026-07-07", "2026-06-01"])("sérialise la période inclusive du 01/06
   expect(params.get("min_duration_minutes")).toBe("3");
   expect(params.has("max_subscribers")).toBe(false);
   expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+const nextLabel = "Charger 50 vidéos supplémentaires";
+const signature = "a".repeat(64);
+function page(items: Video[], options: Record<string, unknown> = {}) {
+  return { ok: true, json: async () => ({
+    items, examined_count: items.length, retained_count: items.length,
+    filtered_out_count: 0, omitted_count: 0, daily_limit: 20, searches_remaining: 19,
+    next_page_token: null, next_page_signature: null, page_number: 1,
+    notice: "Recherche non exhaustive.", ...options,
+  }) };
+}
+async function firstPage(fetchMock: ReturnType<typeof vi.fn<() => unknown>>) {
+  const view = setup(fetchMock);
+  expect(fetchMock).not.toHaveBeenCalled();
+  accept();
+  fireEvent.submit(view.form);
+  await screen.findByText(/1 page\(s\) chargée/);
+  return view;
+}
+
+it("charge exactement deux pages manuelles, déduplique et cumule sans confondre vidéos uniques", async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page([video], {next_page_token: "opaque+/= token", next_page_signature: signature}))
+    .mockResolvedValueOnce(page([video, {...video, id: "second", title: "Deuxième"}], {
+      page_number: 2, searches_remaining: 18, next_page_token: "third", next_page_signature: signature,
+    }));
+  const {form} = await firstPage(fetchMock);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  fireEvent.change(screen.getByRole("textbox"), {target: {value: "new criteria"}});
+  fireEvent.change(screen.getByLabelText("Vues minimum"), {target: {value: "100"}});
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  expect(await screen.findByText(/2 page\(s\) chargée/)).toBeVisible();
+  expect(screen.getByText(/3 vidéo\(s\) examinée\(s\), 3 retenue/)).toBeVisible();
+  expect(screen.getByText(/2 vidéo\(s\) unique/)).toBeVisible();
+  expect(screen.getAllByRole("heading").map(node => node.textContent)).toEqual(["Titre simulé", "Deuxième"]);
+  const params = new URL(fetchMock.mock.calls[1][0], "http://test").searchParams;
+  expect(params.get("page_token")).toBe("opaque+/= token");
+  expect(params.get("page_signature")).toBe(signature);
+  expect(params.get("q")).toBe("python");
+  expect(params.has("min_views")).toBe(false);
+  expect(screen.queryByRole("button", {name: nextLabel})).not.toBeInTheDocument();
+  expect(screen.getByText(/Limite de deux pages atteinte/)).toBeVisible();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  // Nouvelle soumission : critères mis à jour, aucun ancien jeton et compteurs réinitialisés.
+  fetchMock.mockResolvedValueOnce(page([], {examined_count: 4, filtered_out_count: 4}));
+  fireEvent.submit(form);
+  await screen.findByText(/1 page\(s\) chargée/);
+  const fresh = new URL(fetchMock.mock.calls[2][0], "http://test").searchParams;
+  expect(fresh.get("q")).toBe("new criteria");
+  expect(fresh.get("min_views")).toBe("100");
+  expect(fresh.has("page_token")).toBe(false);
+  expect(screen.getByText(/4 vidéo\(s\) examinée/)).toBeVisible();
+  expect(screen.queryByRole("heading", {name: "Titre simulé"})).not.toBeInTheDocument();
+});
+
+it("continue après une page entièrement filtrée puis termine sans jeton", async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page([], {examined_count: 50, filtered_out_count: 50, next_page_token: "next", next_page_signature: signature}))
+    .mockResolvedValueOnce(page([], {page_number: 2, examined_count: 50, filtered_out_count: 50, searches_remaining: 18}));
+  await firstPage(fetchMock);
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  expect(await screen.findByText(/100 vidéo\(s\) examinée\(s\), 0 retenue\(s\), 100 écartée/)).toBeVisible();
+  expect(screen.getByText(/0 vidéo\(s\) unique/)).toBeVisible();
+  expect(screen.queryByRole("button", {name: nextLabel})).not.toBeInTheDocument();
+});
+
+it("termine dès la première page sans jeton et ne recherche pas au remontage", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(page([video]));
+  const {unmount} = await firstPage(fetchMock);
+  expect(screen.getByText(/Fin de pagination/)).toBeVisible();
+  expect(screen.queryByRole("button", {name: nextLabel})).not.toBeInTheDocument();
+  unmount();
+  render(<VideoSearch />);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it.each(["daily_limit_reached", "youtube_quota_exceeded", "invalid_page_token"])("conserve les résultats et bloque la continuation : %s", async code => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page([video], {next_page_token: "next", next_page_signature: signature}))
+    .mockResolvedValueOnce({ok: false, json: async () => ({error: {code, message: "Erreur simulée"}})});
+  await firstPage(fetchMock);
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Erreur simulée");
+  expect(screen.getByRole("heading", {name: "Titre simulé"})).toBeVisible();
+  expect(screen.getByText(/1 page\(s\) chargée/)).toBeVisible();
+  expect(screen.getByRole("button", {name: nextLabel})).toBeDisabled();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+it("désactive la deuxième page si le solde de la première est nul", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(page([video], {next_page_token: "next", next_page_signature: signature, searches_remaining: 0}));
+  await firstPage(fetchMock);
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  expect(screen.getByRole("button", {name: nextLabel})).toBeDisabled();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it("conserve résultats et jeton après erreur réseau et autorise uniquement une reprise manuelle", async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page([video], {next_page_token: "next", next_page_signature: signature}))
+    .mockRejectedValueOnce(new TypeError("offline"))
+    .mockResolvedValueOnce(page([], {page_number: 2, searches_remaining: 17}));
+  await firstPage(fetchMock);
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  expect(await screen.findByRole("alert")).toHaveTextContent(/solde affiché peut être périmé/);
+  expect(screen.getByRole("heading", {name: "Titre simulé"})).toBeVisible();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  await screen.findByText(/2 page\(s\) chargée/);
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  expect(fetchMock.mock.calls[2][0]).toBe(fetchMock.mock.calls[1][0]);
+});
+
+it("bloque un double clic de continuation et une nouvelle soumission concurrente", async () => {
+  let resolve!: (value: unknown) => void;
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page([video], {next_page_token: "next", next_page_signature: signature}))
+    .mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+  const {form} = await firstPage(fetchMock);
+  const button = screen.getByRole("button", {name: nextLabel});
+  fireEvent.click(button);
+  fireEvent.click(button);
+  fireEvent.submit(form);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole("heading", {name: "Titre simulé"})).toBeVisible();
+  expect(button).toBeDisabled();
+  await act(async () => resolve(page([], {page_number: 2})));
+  expect(screen.getByText(/2 page\(s\) chargée/)).toBeVisible();
+});
+
+it("arrête un jeton répété après la deuxième page", async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page([video], {next_page_token: "same", next_page_signature: signature}))
+    .mockResolvedValueOnce(page([], {page_number: 2, next_page_token: "same", next_page_signature: signature}));
+  await firstPage(fetchMock);
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  expect(await screen.findByRole("alert")).toHaveTextContent(/répété/);
+  expect(screen.queryByRole("button", {name: nextLabel})).not.toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  {next_page_token: "", next_page_signature: signature},
+  {next_page_token: 123, next_page_signature: signature},
+  {next_page_token: "next", next_page_signature: null},
+  {examined_count: -1}, {page_number: 3}, {items: [{id: "invalid"}]},
+])("préserve la page précédente en cas de réponse invalide : %j", async invalid => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page([video], {next_page_token: "next", next_page_signature: signature}))
+    .mockResolvedValueOnce(page([], {page_number: 2, ...invalid}));
+  await firstPage(fetchMock);
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  expect(await screen.findByRole("alert")).toHaveTextContent(/Réponse de recherche invalide/);
+  expect(screen.getByRole("heading", {name: "Titre simulé"})).toBeVisible();
+  expect(screen.getByText(/1 page\(s\) chargée/)).toBeVisible();
+});
+
+it("affiche 100 vidéos au maximum en conservant l’ordre de deux pages de 50", async () => {
+  const makeVideos = (start: number) => Array.from({length: 50}, (_, index) => ({...video, id: String(start + index), title: `Vidéo ${start + index}`}));
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page(makeVideos(0), {next_page_token: "next", next_page_signature: signature}))
+    .mockResolvedValueOnce(page(makeVideos(50), {page_number: 2, searches_remaining: 18}));
+  await firstPage(fetchMock);
+  expect(screen.getAllByRole("heading")).toHaveLength(50);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  await screen.findByText(/2 page\(s\) chargée/);
+  expect(screen.getAllByRole("heading").map(node => node.textContent)).toEqual(Array.from({length: 100}, (_, index) => `Vidéo ${index}`));
+  expect(screen.getByText(/100 vidéo\(s\) unique/)).toBeVisible();
+  expect(screen.queryByRole("button", {name: nextLabel})).not.toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
 });

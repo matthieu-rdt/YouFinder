@@ -146,6 +146,6 @@ def test_reported_date_regression_final_dates_counts_and_budget(api, omit_invali
     query = api.calls[0].url.params
     assert query["publishedAfter"] == "2026-06-01T00:00:00Z"
     assert query["publishedBefore"] == "2026-07-08T00:00:00Z"
-    assert query["maxResults"] == "10"
+    assert query["maxResults"] == "50"
     assert query["order"] == "relevance"
     assert "pageToken" not in query

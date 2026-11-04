@@ -58,3 +58,16 @@ Les filtres sont des fonctions pures dans `backend/app/filters.py`, appliquées 
 Le maximum d’abonnés compare seulement la valeur publique arrondie vers le bas à trois chiffres significatifs. Une valeur masquée ou absente ne satisfait pas un seuil actif. Aucun nombre exact n’est reconstruit. Les trois filtres se combinent par ET avec bornes inclusives ; les statistiques restent des chaînes dans le contrat JSON.
 
 Les compteurs de traitement distinguent vidéos examinées, retenues, écartées et indisponibles. Le filtrage reste limité à dix résultats de pertinence, sans remplacement ni appel supplémentaire. Les champs du formulaire conservent naturellement leurs valeurs après soumission ; aucun stockage navigateur ajouté. Détails dans [[youtube-api]], vérifications dans [[validation]].
+
+
+# Décision phase 4 — deux pages manuelles et critères liés au jeton
+
+Date : 2026-11-04. Statut : implémentation autorisée sur `feat/youtube-pagination`, recette manuelle restante.
+
+Le flux réseau et les services existants sont conservés. `search.list` demande désormais 50 résultats. Une requête traite une seule page, enrichie par lots puis filtrée avec les règles existantes, y compris le contrôle final des dates UTC. Aucun remplissage automatique des exclusions.
+
+Le frontend conserve l’instantané soumis, un verrou immédiat de requête et une limite de deux pages réussies. Le formulaire et la continuation sont bloqués pendant une requête, empêchant une réponse concurrente de remplacer une nouvelle recherche. La liste fusionne les pages dans l’ordre et conserve la première occurrence de chaque identifiant ; les compteurs cumulés restent distincts des vidéos uniques affichées.
+
+Pour refuser un jeton associé à des critères modifiés et ne pas autoriser une troisième page côté backend, une signature HMAC-SHA256 couvre les critères normalisés et le jeton opaque. Seule une réponse de première page délivre cette signature ; la deuxième ne délivre aucune continuation. La clé backend existante sert au HMAC sans être transmise au navigateur, et une rotation de clé invalide les continuations. Aucun stockage de jeton ni nouvelle dépendance n’est ajouté. Le mécanisme ne rend pas la continuation à usage unique ; une reprise manuelle est une tentative supplémentaire et ne progresse pas vers une troisième page autorisée.
+
+Les erreurs de continuation préservent résultats et compteurs acquis. Le solde quotidien est la dernière valeur connue, potentiellement périmée après erreur. Le plafond et son fichier durable sont inchangés. Détails du contrat dans [[youtube-api]], preuves dans [[validation]] et [[codex-reports/phase-04]].

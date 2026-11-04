@@ -57,7 +57,8 @@ class SearchItem(BaseModel):
 
 
 class SearchPage(BaseModel):
-    items: list[SearchItem]
+    items: list[SearchItem] = Field(max_length=50)
+    nextPageToken: str | None = Field(default=None, min_length=1, max_length=2048, strict=True)
 
 
 def duration_seconds(value: str | None) -> int | None:
@@ -113,6 +114,8 @@ class YouTubeClient:
                 reasons = {error["reason"] for error in errors if isinstance(error, dict) and isinstance(error.get("reason"), str)}
             except (ValueError, KeyError, TypeError):
                 pass
+            if "invalidPageToken" in reasons:
+                raise SearchError(400, "invalid_page_token", "Le jeton YouTube est invalide. Relancez la recherche depuis la première page.")
             if reasons & {"quotaExceeded", "dailyLimitExceeded", "dailyLimitExceededUnreg"}:
                 raise SearchError(429, "youtube_quota_exceeded", "Quota Google YouTube épuisé. Aucune nouvelle tentative automatique.")
             if response.status_code == 429 or reasons & {"rateLimitExceeded", "userRateLimitExceeded"}:
@@ -125,16 +128,18 @@ class YouTubeClient:
         except (ValueError, ValidationError):
             raise SearchError(502, "youtube_invalid_response", "La réponse de YouTube est inexploitable.") from None
 
-    async def search(self, params: SearchParams) -> tuple[list[Video], int]:
-        query = {"part": "snippet", "type": "video", "maxResults": 10, "order": "relevance", "q": params.q}
+    async def search(self, params: SearchParams) -> tuple[list[Video], int, str | None]:
+        query = {"part": "snippet", "type": "video", "maxResults": 50, "order": "relevance", "q": params.q}
         for name, value in (("publishedAfter", params.published_after), ("publishedBefore", params.published_before)):
             if value:
                 query[name] = value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        if params.page_token is not None:
+            query["pageToken"] = params.page_token
         search = await self._get("search", query, SearchPage)
-        # Une seule page, aucun parcours automatique de nextPageToken.
-        ids = list(dict.fromkeys(item.id.videoId for item in search.items[:10]))
+        # Une page par action ; jamais de parcours automatique.
+        ids = list(dict.fromkeys(item.id.videoId for item in search.items))
         if not ids:
-            return [], 0
+            return [], 0, search.nextPageToken
         video_page = await self._get("videos", {"part": "snippet,statistics,contentDetails", "id": ",".join(ids)}, ResourcePage)
         videos = {video.id: video for video in video_page.items}
         channel_ids = list(dict.fromkeys(videos[id].snippet.channelId for id in ids if id in videos and videos[id].snippet.channelId))
@@ -166,4 +171,4 @@ class YouTubeClient:
                 broadcast_status=snippet.liveBroadcastContent,
                 youtube_url=f"https://www.youtube.com/watch?v={quote(id, safe='')}",
             ))
-        return results, len(ids) - len(results)
+        return results, len(ids) - len(results), search.nextPageToken
