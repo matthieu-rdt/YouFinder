@@ -1,6 +1,6 @@
-# Intégration YouTube Data API v3 — phases 2 et 3
+# Intégration YouTube Data API v3 — phases 2 à 4
 
-Date : 2026-11-02. Périmètre validé : recherche personnelle, dix résultats, dates de publication, statistiques publiques et plafond interne de vingt tentatives/jour configurable.
+Mise à jour : 2026-11-04. Périmètre validé : recherche personnelle, deux pages manuelles de cinquante identifiants maximum chacune, dates de publication, statistiques publiques et plafond interne de vingt tentatives/jour configurable.
 
 ## Flux et contrat
 
@@ -10,7 +10,7 @@ Navigateur → Next.js `/api/*` → FastAPI → `https://www.googleapis.com/yout
 
 `q` est obligatoire (1–200 caractères après suppression des espaces périphériques). Les dates doivent être RFC 3339 avec fuseau horaire, normalisées en UTC. `published_after` est inclusif et `published_before` exclusif ; si les deux bornes sont présentes, le début doit strictement précéder la fin. Les paramètres supplémentaires sont refusés. L’interface inclut entièrement les jours UTC sélectionnés en envoyant le début à 00:00 UTC et le lendemain du dernier jour à 00:00 UTC comme fin exclusive. Aucun appel au montage de la page : seul le gestionnaire de soumission déclenche `fetch`, avec `cache: no-store`. Le backend ajoute `Cache-Control: no-store` aux réponses de recherche.
 
-1. `search.list(part=snippet,type=video,maxResults=10,order=relevance,q=...)`, avec les dates éventuelles.
+1. `search.list(part=snippet,type=video,maxResults=50,order=relevance,q=...)`, avec les dates éventuelles.
 2. `videos.list(part=snippet,statistics,contentDetails,id=...)` pour tous les identifiants de cette page.
 3. `channels.list(part=statistics,id=...)` pour les identifiants de chaînes dédupliqués.
 
@@ -18,13 +18,13 @@ Après enrichissement, le backend contrôle `videos.list.snippet.publishedAt` da
 
 Google documente `publishedBefore` comme « avant ou à » la borne. Nous transmettons la borne du lendemain à la recherche et imposons strictement l’exclusion de cet instant au contrôle final. Les bornes de recherche sont décrites comme portant sur la création des ressources ; `videos.list.snippet.publishedAt` décrit la publication, pouvant différer du téléversement. Nous n’inférons pas une égalité entre les dates des deux ressources et ne remplaçons pas la date enrichie par celle de recherche.
 
-Pas de suivi de `nextPageToken`, pas d’appel par vidéo ou par chaîne. Pas d’enrichissement si la recherche est vide. L’assemblage préserve l’ordre initial de recherche, même si Google retourne les détails dans un ordre différent. Les vidéos absentes de `videos.list` sont omises et comptées dans `omitted_count`. Un échec d’enrichissement rend une erreur explicite et non un faux résultat vide.
+Une page par requête applicative, avec continuation manuelle via `nextPageToken` puis `pageToken`. Aucun appel par vidéo ou par chaîne. Pas d’enrichissement si la recherche est vide. L’assemblage préserve l’ordre initial de recherche, même si Google retourne les détails dans un ordre différent. Les vidéos absentes de `videos.list` sont omises et comptées dans `omitted_count`. Un échec d’enrichissement rend une erreur explicite et non un faux résultat vide.
 
 La réponse comprend `items`, `omitted_count`, `daily_limit`, `searches_remaining` et un avertissement sur la non-exhaustivité. Les statistiques restent des chaînes décimales afin de préserver les grands entiers au passage vers JavaScript ; `null` signifie indisponible. `subscribers_hidden` distingue un nombre masqué d’une donnée manquante. La durée ISO originale est accompagnée d’un libellé de présentation (conversion d’unité uniquement). Pour les directs en cours ou programmés, le libellé de durée reste nul et l’état est affiché.
 
 ## Quotas et comportement d’erreur
 
-La documentation Google consultée le 2026-11-02 décrit un quota distinct de 100 appels `search.list` par jour, chaque appel consommant une unité de ce quota. Les autres endpoints partagent par défaut 10 000 unités/jour ; `videos.list` et `channels.list` valent chacun une unité. Une recherche complète consomme donc un appel de recherche et au plus deux unités du quota commun. Vérifier les allocations du projet dans Google Cloud ; ne pas supposer que le plafond interne représente le quota Google restant. La remise à zéro Google suit minuit heure du Pacifique.
+La documentation Google consultée le 2026-11-02 décrit un quota distinct de 100 appels `search.list` par jour, chaque appel consommant une unité de ce quota. Les autres endpoints partagent par défaut 10 000 unités/jour ; `videos.list` et `channels.list` valent chacun une unité. Une page complète consomme donc un appel de recherche et au plus deux unités du quota commun. Vérifier les allocations du projet dans Google Cloud ; ne pas supposer que le plafond interne représente le quota Google restant. La remise à zéro Google suit minuit heure du Pacifique.
 
 Le plafond **interne** est partagé par l’installation locale : `YOUTUBE_DAILY_SEARCH_LIMIT=20`, journée Europe/Paris. La réservation durable se fait avant tout appel Google. Une tentative échouée reste comptée ; absence de clé ou paramètres invalides ne comptent pas. `0` bloque les recherches. Un verrou `flock` protège les réservations entre threads/processus partageant le même fichier. Le fichier n’enregistre aucune requête ni donnée YouTube. Une corruption, un jour stocké dans le futur ou une erreur d’écriture bloque la recherche. Une restauration d’ancienne sauvegarde ou suppression manuelle du fichier peut rétablir un ancien compteur : ce n’est pas un dispositif de facturation ni une limite distribuée.
 
@@ -59,7 +59,7 @@ L’interface identifie YouTube comme source et utilise le logo officiel « Deve
 
 `SearchParams` porte les paramètres autorisés actuellement. Le routeur gère HTTP et le plafond ; le client YouTube récupère et assemble les ressources ; le frontend présente le contrat typé. Cette séparation permet d’ajouter ultérieurement des paramètres et une étape de sélection, après étude de conformité et tests dédiés.
 
-## Phase 3 — filtres validés le 2026-11-03
+## Phase 3 — filtres validés le 2026-11-03 (limite étendue en phase 4)
 
 Trois paramètres facultatifs : `min_views`, `max_subscribers`, `min_duration_minutes`. Ce sont des entiers positifs ou nuls, écrits en chiffres décimaux ; absence = filtre désactivé, zéro = seuil actif. Les chaînes vides, fractions, signes et notations exponentielles sont refusés (422) avant réservation du quota.
 
@@ -71,7 +71,23 @@ La réponse ajoute `examined_count` (vidéos disponibles après enrichissement),
 
 Exemple : `/api/videos/search?q=python&min_views=1000&max_subscribers=10000&min_duration_minutes=10`.
 
-Les dix premiers résultats par pertinence seulement sont examinés, sans pagination ni remplacement. Aucun résultat ne prouve pas l’absence de vidéos correspondantes ailleurs. Le frontend affiche l’avertissement `notice` et conserve les critères après résultat ou erreur pendant la session de page, sans persistance navigateur. Aucun appel supplémentaire, modification du quota, package ajouté ou stockage des résultats. Shorts et tri restent hors périmètre.
+Depuis la phase 4, seuls les résultats des deux pages consultées au maximum sont examinés, sans remplacement des exclusions. Aucun résultat ne prouve pas l’absence de vidéos correspondantes ailleurs. Le frontend affiche l’avertissement `notice` et conserve les critères après résultat ou erreur pendant la session de page, sans persistance navigateur. Les filtres n’ajoutent aucun appel ; chaque page supplémentaire demandée manuellement consomme une tentative interne. Aucun package ajouté ni stockage durable des résultats. Shorts et tri restent hors périmètre.
+
+## Phase 4 — pagination manuelle, contrat actuel
+
+Première page : paramètres habituels sans jeton. Deuxième page : mêmes critères avec `page_token` et `page_signature` fournis ensemble. `page_token` est opaque, non vide, limité à 2 048 caractères par politique applicative (pas une limite Google documentée) ; `page_signature` contient 64 caractères hexadécimaux minuscules. Une entrée structurellement invalide donne `422 invalid_parameters` avant réservation.
+
+La réponse ajoute `page_number` (1 ou 2), `next_page_token` et `next_page_signature` (chaîne ou `null`). Les champs `examined_count`, `retained_count`, `filtered_out_count` et `omitted_count` restent propres à cette page. Le frontend additionne les compteurs de pages réussies et déduplique séparément les vidéos affichées, par identifiant et première occurrence. `examined_count` compte les vidéos enrichies, après déduplication des identifiants dans la page ; les indisponibles sont comptées à part.
+
+La signature HMAC-SHA256 lie le jeton aux critères normalisés (mot-clé, dates UTC, filtres) et au contexte « page 2 ». Elle est calculée côté backend avec la clé déjà disponible, sans exposer cette clé ni ajouter de secret de configuration. Une signature incohérente donne `422 invalid_page_token` avant consommation. Un changement de clé invalide les continuations en cours. La signature n’est pas envoyée à Google.
+
+Seule la première page peut délivrer un jeton signé ; après la deuxième, les deux champs de continuation valent toujours `null`, même si Google fournit une troisième page. Un jeton Google répété arrête le parcours, avec notice explicite. Chaque réponse brute est limitée à 50 éléments ; une réponse dépassant cette limite ou contenant un jeton inexploitable produit `502 youtube_invalid_response` sans enrichissement. Aucun jeton ne déclenche un chargement automatique.
+
+Le motif officiel `invalidPageToken` est traduit en `400 invalid_page_token` avec invitation à recommencer depuis la première page. Un échec après réservation reste compté. Les résultats déjà affichés sont conservés après erreur de continuation ; le bouton est bloqué en cas de jeton invalide ou de quota épuisé, et une erreur transitoire autorise une reprise manuelle. Le dernier solde connu peut être périmé après un échec.
+
+Le plafond de deux pages décrit le parcours applicatif, pas un mécanisme anti-rejeu : sans session persistante, une continuation valide peut être redemandée manuellement, avec une nouvelle tentative réservée. Elle ne permet pas de signer un jeton de troisième page. Un utilisateur peut toujours soumettre une nouvelle recherche depuis la première page. Les résultats peuvent évoluer entre appels ; aucun ensemble figé ni exhaustif n’est promis.
+
+Références officielles consultées le 2026-11-04 : [paramètres de recherche et maxResults](https://developers.google.com/youtube/data/reference/rest/v3/search/list), [erreur invalidPageToken](https://developers.google.com/youtube/data/reference/rest/v3/errors). Les quotas Google restent distincts et dépendent des allocations du projet. Aucun appel de recherche YouTube réel n’a été effectué pour ces vérifications documentaires.
 
 ## Sources officielles consultées
 

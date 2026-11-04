@@ -19,7 +19,7 @@ def test_missing_key_does_not_contact_google_or_count(api):
     assert api.get(path="/api/health").json() == {"status": "ok"}
 
 
-def test_empty_results_and_no_pagination(api):
+def test_empty_results_without_automatic_pagination(api):
     api.handler = lambda request: httpx.Response(200, json={"items": [], "nextPageToken": "ignored"})
     response = api.get({"q": " python "})
     assert response.status_code == 200
@@ -29,7 +29,7 @@ def test_empty_results_and_no_pagination(api):
     assert len(api.calls) == 1
     query = api.calls[0].url.params
     assert query["q"] == "python"
-    assert query["maxResults"] == "10"
+    assert query["maxResults"] == "50"
     assert query["type"] == "video"
     assert query["order"] == "relevance"
     assert "pageToken" not in query

@@ -16,6 +16,9 @@ export type Video = {
 };
 
 export type SearchResponse = {
+  next_page_token: string | null;
+  next_page_signature: string | null;
+  page_number: number;
   items: Video[];
   omitted_count: number;
   examined_count: number;
@@ -47,4 +50,34 @@ export function nextUtcDayStart(day: string): string {
   const result = date.toISOString().replace(".000Z", "Z");
   if (!/^[0-9]{4}-/.test(result)) throw new Error("Borne UTC hors limites.");
   return result;
+}
+
+function isVideo(value: unknown): value is Video {
+  if (!value || typeof value !== "object") return false;
+  const video = value as Record<string, unknown>;
+  const nullableStrings = ["title", "thumbnail_url", "channel_id", "channel_title", "channel_url",
+    "published_at", "view_count", "subscriber_count", "duration_iso", "duration_label", "broadcast_status"];
+  return typeof video.id === "string" && video.id.length > 0 && typeof video.youtube_url === "string"
+    && nullableStrings.every(key => video[key] === null || typeof video[key] === "string")
+    && (video.subscribers_hidden === null || typeof video.subscribers_hidden === "boolean");
+}
+
+// Valider toute la page avant de modifier les résultats déjà affichés.
+export function isSearchResponse(value: unknown): value is SearchResponse {
+  if (!value || typeof value !== "object") return false;
+  const body = value as SearchResponse;
+  const counts = [body.examined_count, body.retained_count, body.filtered_out_count,
+    body.omitted_count, body.daily_limit, body.searches_remaining];
+  return Array.isArray(body.items) && body.items.every(isVideo)
+    && counts.every(count => Number.isSafeInteger(count) && count >= 0)
+    && body.searches_remaining <= body.daily_limit
+    && body.retained_count === body.items.length
+    && body.examined_count === body.retained_count + body.filtered_out_count
+    && body.examined_count + body.omitted_count <= 50
+    && (body.page_number === 1 || body.page_number === 2)
+    && typeof body.notice === "string"
+    && ((body.next_page_token === null && body.next_page_signature === null)
+      || (typeof body.next_page_token === "string" && body.next_page_token.length > 0
+        && body.next_page_token.length <= 2048 && typeof body.next_page_signature === "string"
+        && /^[0-9a-f]{64}$/.test(body.next_page_signature)));
 }
