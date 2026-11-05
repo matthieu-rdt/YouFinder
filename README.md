@@ -39,7 +39,7 @@ Cette commande conserve les volumes. Ne jamais utiliser `down -v`.
 
 ## Recherche et limites
 
-- Jusqu’à **deux pages de 50 identifiants**, soit 100 au maximum, chargées manuellement, dans l’ordre de pertinence retourné par YouTube. Ce n’est pas une analyse exhaustive de la plateforme.
+- Jusqu’à **deux pages de 50 identifiants**, soit 100 au maximum, chargées manuellement, dans l’ordre initial de pertinence retourné par YouTube. Ce n’est pas une analyse exhaustive de la plateforme.
 - Bornes de publication facultatives : début inclus à 00:00 UTC, fin du jour sélectionné incluse via une borne exclusive au lendemain à 00:00 UTC. Contrôle final sur la date issue de `videos.list` : les vidéos hors période, ou à date absente/invalide lorsqu’une borne est demandée, sont écartées. Le quota interne utilise une autre convention : journée **Europe/Paris**.
 - Titre, miniature, chaîne, publication, vues publiques, abonnés publics lorsqu’ils sont disponibles, durée fournie par l’API et liens YouTube.
 - Les abonnés sont arrondis par YouTube. Une donnée absente est indiquée comme indisponible, jamais remplacée par zéro. Un zéro fourni par l’API reste un zéro.
@@ -49,11 +49,15 @@ Cette commande conserve les volumes. Ne jamais utiliser `down -v`.
 - Les seuils sont inclusifs. Une donnée manquante ou inexploitable exclut la vidéo uniquement si le filtre correspondant est actif. Les abonnés masqués sont exclus avec le filtre abonnés ; les directs en cours et programmés avec le filtre durée.
 - Le nombre public d’abonnés est arrondi vers le bas à trois chiffres significatifs par YouTube : le filtre ne garantit pas un plafond sur le nombre réel exact, qui n’est jamais reconstruit.
 - Affichage des pages chargées, vidéos examinées, retenues, écartées et indisponibles omises. Les compteurs sont cumulés par page et distincts du nombre de vidéos uniques affichées. Les pages consultées sont filtrées sans remplacement des exclusions : un résultat vide ne démontre pas l’absence de vidéos correspondantes sur YouTube.
-- Les critères restent dans le formulaire après résultat ou erreur, jusqu’au rechargement de la page. Aucun filtre Shorts, tri local ou métrique analytique dérivée.
+- Les critères restent dans le formulaire après résultat ou erreur, jusqu’au rechargement de la page. Aucun filtre Shorts ni métrique analytique dérivée.
 
 La première soumission charge une page de 50 résultats maximum. Le bouton **« Charger 50 vidéos supplémentaires »** permet une seule continuation, sans appel automatique. Les résultats précédents sont conservés et les doublons par identifiant masqués en préservant la première occurrence. Une page entièrement filtrée peut avoir une suite. Après la deuxième page, le parcours s’arrête même si YouTube propose encore un jeton.
 
 La continuation utilise les critères de la recherche soumise ; modifier les champs ne les applique qu’à une nouvelle soumission. Celle-ci réinitialise liste, jetons et compteurs. Une erreur de deuxième page conserve les résultats et compteurs acquis ; un échec réseau peut avoir consommé une tentative, et le dernier solde affiché peut être périmé. Une reprise transitoire reste manuelle, tandis qu’un jeton invalide ou un quota épuisé bloque la continuation.
+
+Le sélecteur **« Trier les vidéos chargées »** propose l’ordre initial de pertinence YouTube, la date décroissante (plus récentes d’abord) et la date croissante (plus anciennes d’abord). Il trie uniquement les vidéos déjà chargées, selon leur date de publication enrichie, sans nouvel appel API ni consommation de quota. Il ne s’agit pas d’une recherche exhaustive par date sur YouTube.
+
+Les dates absentes ou invalides restent en fin des deux tris chronologiques, dans leur ordre initial ; les dates égales conservent également l’ordre initial. Le tri compare les instants avec fuseau et fractions de seconde, tandis que les cartes affichent le jour UTC. Le mode choisi est conservé après la deuxième page, une erreur ou une nouvelle recherche, et revient à la pertinence après rechargement complet. Aucun stockage navigateur n’est utilisé. Le tri ne change ni les filtres, ni les doublons masqués, ni les compteurs.
 
 Le plafond interne vaut **20 tentatives par jour**, partagé par toute l’application et configurable avec `YOUTUBE_DAILY_SEARCH_LIMIT` (entier positif ou nul ; zéro bloque les recherches). Chaque page demandée réserve une tentative. Chaque tentative réservée avant l’appel Google reste comptée, même si Google renvoie une erreur ou si la connexion échoue. Les entrées invalides et l’absence de clé ne consomment rien. Aucun retry automatique, aucune recherche à chaque frappe.
 
@@ -107,6 +111,7 @@ Le proxy utilise par défaut `http://127.0.0.1:8000`. `BACKEND_INTERNAL_URL` cha
 - `backend/app/schemas.py` : contrat de recherche et de réponse.
 - `backend/app/quota.py` : compteur quotidien local.
 - `frontend/src/components/` : formulaire explicite et cartes vidéo.
+- `frontend/src/lib/video-sort.ts` : tri local pur et stable des publications enrichies.
 - `frontend/src/app/confidentialite/` et `conditions/` : informations utilisateur.
 - `docs/architecture.md`, `docs/youtube-api.md`, `docs/incidents.md` : documentation ouvrable dans Obsidian.
 - `docs/versions.json` : versions et digests vérifiés lors de la phase initiale, inchangés ici.

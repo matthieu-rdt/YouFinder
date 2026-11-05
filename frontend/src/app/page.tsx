@@ -6,7 +6,7 @@ export default function Home() {
       <p className="text-sm font-semibold uppercase tracking-widest text-red-400">Projet personnel</p>
       <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">YouFinder</h1>
       <p className="text-lg text-slate-300">Recherchez des vidéos avec les données publiques de YouTube.</p>
-      <p className="rounded border border-slate-700 p-4">Deux pages de 50 identifiants maximum, soit 100 au total, chargées manuellement, dans l’ordre renvoyé par YouTube. Ces résultats ne représentent pas une analyse exhaustive de YouTube.</p>
+      <p className="rounded border border-slate-700 p-4">Deux pages de 50 identifiants maximum, soit 100 au total, chargées manuellement, dans l’ordre initial renvoyé par YouTube. Un tri chronologique local est disponible sur les vidéos déjà chargées. Ces résultats ne représentent pas une analyse exhaustive de YouTube.</p>
       <VideoSearch />
       <footer className="flex flex-wrap gap-5 border-t border-slate-700 pt-5 text-sm text-slate-400">
         <a className="underline" href="https://www.youtube.com/">Données : YouTube</a>

@@ -71,3 +71,16 @@ Le frontend conserve l’instantané soumis, un verrou immédiat de requête et 
 Pour refuser un jeton associé à des critères modifiés et ne pas autoriser une troisième page côté backend, une signature HMAC-SHA256 couvre les critères normalisés et le jeton opaque. Seule une réponse de première page délivre cette signature ; la deuxième ne délivre aucune continuation. La clé backend existante sert au HMAC sans être transmise au navigateur, et une rotation de clé invalide les continuations. Aucun stockage de jeton ni nouvelle dépendance n’est ajouté. Le mécanisme ne rend pas la continuation à usage unique ; une reprise manuelle est une tentative supplémentaire et ne progresse pas vers une troisième page autorisée.
 
 Les erreurs de continuation préservent résultats et compteurs acquis. Le solde quotidien est la dernière valeur connue, potentiellement périmée après erreur. Le plafond et son fichier durable sont inchangés. Détails du contrat dans [[youtube-api]], preuves dans [[validation]] et [[codex-reports/phase-04]].
+
+
+# Décision phase 5 — tri local dérivé d’une liste source immuable
+
+Date : 2026-11-04. Statut : plan validé par l’utilisateur, implémentation réalisée sur `feat/youtube-date-sorting`, recette manuelle restante.
+
+La fonction pure `sortVideos()` dans `frontend/src/lib/video-sort.ts` trie une copie des vidéos uniques reçues. `result.items` conserve l’ordre initial dédupliqué des pages YouTube. Le frontend ajoute un seul état React pour le mode de tri et calcule la liste affichée au rendu, sans effet réseau ni seconde liste stockée à synchroniser. La limite de 100 identifiants ne justifie pas de cache de calcul supplémentaire.
+
+L’analyse de `published_at` valide calendrier et fuseau, puis sépare secondes UTC entières et fraction décimale normalisée. La comparaison des fractions sous forme de chaînes conserve leur précision au-delà des millisecondes sans bibliothèque supplémentaire. Les dates égales et les dates invalides sont départagées par l’index de la liste source ; les invalides restent après toutes les dates valides dans les deux sens. Secondes intercalaires et année zéro sont traitées comme indisponibles, sans date de remplacement.
+
+Le sélecteur natif est proche des cartes, hors du formulaire de recherche, et reste utilisable pendant une continuation. Les gestionnaires de recherche, pagination, fusion, déduplication et compteurs n’ont pas été modifiés. Le choix est conservé lors des nouvelles recherches et revient à la pertinence au remontage, sans persistance navigateur. Le tri concerne uniquement l’échantillon chargé, jamais une recherche exhaustive par date.
+
+Aucun changement backend, contrat API, paramètre YouTube, quota, service, dépendance ou configuration Compose. Détails dans [[youtube-api]], vérifications dans [[validation]] et plan/bilan dans [[codex-reports/phase-05]].
