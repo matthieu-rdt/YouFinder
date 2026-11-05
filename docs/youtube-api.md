@@ -1,4 +1,4 @@
-# Intégration YouTube Data API v3 — phases 2 à 4
+# Intégration YouTube Data API v3 — phases 2 à 5
 
 Mise à jour : 2026-11-04. Périmètre validé : recherche personnelle, deux pages manuelles de cinquante identifiants maximum chacune, dates de publication, statistiques publiques et plafond interne de vingt tentatives/jour configurable.
 
@@ -71,7 +71,7 @@ La réponse ajoute `examined_count` (vidéos disponibles après enrichissement),
 
 Exemple : `/api/videos/search?q=python&min_views=1000&max_subscribers=10000&min_duration_minutes=10`.
 
-Depuis la phase 4, seuls les résultats des deux pages consultées au maximum sont examinés, sans remplacement des exclusions. Aucun résultat ne prouve pas l’absence de vidéos correspondantes ailleurs. Le frontend affiche l’avertissement `notice` et conserve les critères après résultat ou erreur pendant la session de page, sans persistance navigateur. Les filtres n’ajoutent aucun appel ; chaque page supplémentaire demandée manuellement consomme une tentative interne. Aucun package ajouté ni stockage durable des résultats. Shorts et tri restent hors périmètre.
+Depuis la phase 4, seuls les résultats des deux pages consultées au maximum sont examinés, sans remplacement des exclusions. Aucun résultat ne prouve pas l’absence de vidéos correspondantes ailleurs. Le frontend affiche l’avertissement `notice` et conserve les critères après résultat ou erreur pendant la session de page, sans persistance navigateur. Les filtres n’ajoutent aucun appel ; chaque page supplémentaire demandée manuellement consomme une tentative interne. Aucun package ajouté ni stockage durable des résultats. Shorts reste hors périmètre ; le tri local est décrit dans la phase 5 ci-dessous.
 
 ## Phase 4 — pagination manuelle, contrat actuel
 
@@ -88,6 +88,18 @@ Le motif officiel `invalidPageToken` est traduit en `400 invalid_page_token` ave
 Le plafond de deux pages décrit le parcours applicatif, pas un mécanisme anti-rejeu : sans session persistante, une continuation valide peut être redemandée manuellement, avec une nouvelle tentative réservée. Elle ne permet pas de signer un jeton de troisième page. Un utilisateur peut toujours soumettre une nouvelle recherche depuis la première page. Les résultats peuvent évoluer entre appels ; aucun ensemble figé ni exhaustif n’est promis.
 
 Références officielles consultées le 2026-11-04 : [paramètres de recherche et maxResults](https://developers.google.com/youtube/data/reference/rest/v3/search/list), [erreur invalidPageToken](https://developers.google.com/youtube/data/reference/rest/v3/errors). Les quotas Google restent distincts et dépendent des allocations du projet. Aucun appel de recherche YouTube réel n’a été effectué pour ces vérifications documentaires.
+
+## Phase 5 — tri chronologique exclusivement local
+
+Le frontend propose « Pertinence YouTube : ordre initial », « Date décroissante : plus récentes d’abord » et « Date croissante : plus anciennes d’abord ». Le sélecteur agit uniquement sur les vidéos uniques déjà chargées et retenues, sans requête réseau ni consommation de quota. Les paramètres de `search.list`, y compris `order=relevance`, le contrat HTTP et les signatures de continuation restent inchangés. Aucun paramètre de tri n’est transmis au backend.
+
+`sortVideos()` dans `frontend/src/lib/video-sort.ts` retourne une copie et utilise exclusivement `Video.published_at`, issu des données enrichies. La liste source dédupliquée conserve l’ordre de première apparition ; revenir à la pertinence restitue cet ordre, y compris après deux pages. Les compteurs de traitement et le solde quotidien ne sont pas recalculés.
+
+Les dates sont validées au format RFC 3339 avec fuseau explicite, années 0001 à 9999 et calendrier valide. Les instants sont comparés en secondes UTC puis par fraction décimale, sans perte de précision des chiffres fournis. Deux écritures du même instant, y compris avec des décalages horaires ou zéros décimaux différents, sont égales et départagées par l’index source. Dates absentes, vides, sans fuseau, malformées ou impossibles : classement en fin dans les deux directions, ordre source conservé entre elles, sans suppression ni date inventée. Les secondes intercalaires (`:60`) ne sont pas prises en charge et sont traitées comme indisponibles pour ce tri.
+
+Le mode reste en mémoire React pendant la page ouverte, après continuation, erreur et nouvelle recherche. Un rechargement complet revient à la pertinence ; aucun `localStorage` ou `sessionStorage`. La page 2 est fusionnée et dédupliquée comme auparavant, puis l’ensemble est trié selon le mode courant, y compris si celui-ci change pendant la requête.
+
+Ce classement ne découvre aucune vidéo supplémentaire et ne garantit pas le résultat le plus récent ou ancien de YouTube. L’affichage des cartes en jour UTC reste inchangé et peut masquer une différence d’heure ou de fraction prise en compte par le tri. La validation des dates pour le tri est plus stricte que le formateur historique des cartes ; celui-ci n’est pas modifié dans cette phase. Les filtres, dont le correctif temporel backend, restent inchangés.
 
 ## Sources officielles consultées
 

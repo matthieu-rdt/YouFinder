@@ -2,6 +2,7 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import { isSearchResponse, nextUtcDayStart, type SearchResponse } from "../lib/youtube";
+import { sortVideos, type VideoSortMode } from "../lib/video-sort";
 import { VideoCard } from "./video-card";
 
 export function VideoSearch() {
@@ -14,6 +15,8 @@ export function VideoSearch() {
   const pagesLoaded = useRef(0);
   const [pages, setPages] = useState(0);
   const [continuationBlocked, setContinuationBlocked] = useState(false);
+  const [sortMode, setSortMode] = useState<VideoSortMode>("relevance");
+  const displayedVideos = sortVideos(result?.items ?? [], sortMode);
 
   async function load(params: URLSearchParams, append: boolean) {
     if (inFlight.current || (append && pagesLoaded.current !== 1)) return;
@@ -148,7 +151,16 @@ export function VideoSearch() {
             disabled={loading || !accepted || continuationBlocked || result.searches_remaining === 0}
             className="mt-4 rounded bg-red-600 px-5 py-3 disabled:opacity-50">Charger 50 vidéos supplémentaires</button>}
           <p>{pages === 2 ? "Limite de deux pages atteinte (100 identifiants maximum)." : !result.next_page_token ? "Fin de pagination : aucune page suivante." : result.searches_remaining === 0 ? "Plafond quotidien atteint : aucune tentative restante." : "La deuxième page est facultative et consomme une tentative."}</p>
-          {result.items.length === 0 ? <p className="mt-4">Aucune vidéo ne correspond aux critères parmi les vidéos examinées.</p> : <ol className="mt-5 grid gap-5 sm:grid-cols-2">{result.items.map(video => <li key={video.id}><VideoCard video={video} /></li>)}</ol>}
+          <label className="mt-4 grid w-fit gap-2">Trier les vidéos chargées
+            <select value={sortMode} onChange={event => setSortMode(event.target.value as VideoSortMode)}
+              aria-describedby="local-sort-notice" className="rounded bg-slate-800 p-3">
+              <option value="relevance">Pertinence YouTube : ordre initial</option>
+              <option value="date-desc">Date décroissante : plus récentes d’abord</option>
+              <option value="date-asc">Date croissante : plus anciennes d’abord</option>
+            </select>
+          </label>
+          <p id="local-sort-notice" className="text-sm text-slate-400">Tri local des vidéos déjà chargées, sans nouvel appel YouTube. Ce tri n’est pas une recherche exhaustive par date sur YouTube. Les dates absentes ou invalides sont placées à la fin des tris chronologiques.</p>
+          {result.items.length === 0 ? <p className="mt-4">Aucune vidéo ne correspond aux critères parmi les vidéos examinées.</p> : <ol className="mt-5 grid gap-5 sm:grid-cols-2">{displayedVideos.map(video => <li key={video.id}><VideoCard video={video} /></li>)}</ol>}
         </>}
       </div>
     </section>

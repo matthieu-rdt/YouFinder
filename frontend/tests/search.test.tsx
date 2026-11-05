@@ -335,3 +335,134 @@ it("affiche 100 vidéos au maximum en conservant l’ordre de deux pages de 50",
   expect(screen.queryByRole("button", {name: nextLabel})).not.toBeInTheDocument();
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
+
+const sortLabel = "Trier les vidéos chargées";
+const withDate = (id: string, published_at: string | null): Video => ({ ...video, id, title: id, published_at });
+const titles = () => screen.getAllByRole("heading").map(node => node.textContent);
+function chooseSort(value: string) {
+  fireEvent.change(screen.getByRole("combobox", {name: sortLabel}), {target: {value}});
+}
+
+it("trie localement les trois modes sans appel, soumission ou changement de compteur", async () => {
+  const source = [withDate("middle", "2026-06-01T00:00:00Z"), withDate("old", "2025-01-01T00:00:00Z"), withDate("new", "2026-12-01T00:00:00Z")];
+  const fetchMock = vi.fn().mockResolvedValue(page(source, {examined_count: 5, filtered_out_count: 2, omitted_count: 1}));
+  await firstPage(fetchMock);
+  const select = screen.getByRole("combobox", {name: sortLabel});
+  expect(select).toHaveValue("relevance");
+  expect(select.closest("form")).toBeNull();
+  expect(select).toHaveAccessibleDescription(/Tri local des vidéos déjà chargées/);
+  expect(screen.getByText(/pas une recherche exhaustive par date/)).toBeVisible();
+  const counts = screen.getByText(/Compteurs cumulés/).textContent;
+  for (const [mode, expected] of [["date-desc", ["new", "middle", "old"]], ["date-asc", ["old", "middle", "new"]], ["relevance", ["middle", "old", "new"]]] as const) {
+    chooseSort(mode);
+    expect(titles()).toEqual(expected);
+    expect(screen.getByText(/Compteurs cumulés/).textContent).toBe(counts);
+    expect(screen.getByText(/3 vidéo\(s\) unique/)).toBeVisible();
+    expect(screen.getByText(/1 vidéo\(s\) devenue/)).toBeVisible();
+    expect(screen.getByText(/19 tentative/)).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  }
+  expect(new URL(fetchMock.mock.calls[0][0], "http://test").searchParams.toString()).toBe("q=python");
+});
+
+it.each([
+  ["date-desc", ["new", "equal-first", "equal-second", "old", "missing", "invalid"]],
+  ["date-asc", ["old", "equal-first", "equal-second", "new", "missing", "invalid"]],
+] as const)("conserve %s après page 2, égalités et doublons, puis restaure la pertinence", async (mode, expected) => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page([
+      withDate("equal-first", "2026-06-01T00:00:00Z"), withDate("missing", null), withDate("old", "2025-01-01T00:00:00Z"),
+    ], {next_page_token: "next", next_page_signature: signature}))
+    .mockResolvedValueOnce(page([
+      withDate("old", "2027-01-01T00:00:00Z"), // Le doublon ne remplace pas la première occurrence.
+      withDate("new", "2026-12-01T00:00:00Z"), withDate("equal-second", "2026-06-01T02:00:00+02:00"), withDate("invalid", "bad"),
+    ], {page_number: 2, searches_remaining: 18}));
+  await firstPage(fetchMock);
+  chooseSort(mode);
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  await screen.findByText(/2 page\(s\) chargée/);
+  expect(screen.getByRole("combobox", {name: sortLabel})).toHaveValue(mode);
+  expect(titles()).toEqual(expected);
+  expect(screen.getByText(/7 vidéo\(s\) examinée\(s\), 7 retenue/)).toBeVisible();
+  expect(screen.getByText(/6 vidéo\(s\) unique/)).toBeVisible();
+  expect(screen.getByText(/18 tentative/)).toBeVisible();
+  expect(screen.queryByRole("button", {name: nextLabel})).not.toBeInTheDocument();
+  chooseSort("relevance");
+  expect(titles()).toEqual(["equal-first", "missing", "old", "new", "equal-second", "invalid"]);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  const params = new URL(fetchMock.mock.calls[1][0], "http://test").searchParams;
+  expect([...params.keys()]).toEqual(["q", "page_token", "page_signature"]);
+});
+
+it("utilise le dernier mode choisi pendant une continuation en attente", async () => {
+  let resolve!: (value: unknown) => void;
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page([withDate("middle", "2026-06-01T00:00:00Z")], {next_page_token: "next", next_page_signature: signature}))
+    .mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+  await firstPage(fetchMock);
+  chooseSort("date-desc");
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  expect(screen.getByRole("combobox", {name: sortLabel})).toBeEnabled();
+  chooseSort("date-asc");
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  await act(async () => resolve(page([withDate("old", "2025-01-01T00:00:00Z"), withDate("new", "2026-12-01T00:00:00Z")], {page_number: 2})));
+  expect(titles()).toEqual(["old", "middle", "new"]);
+  expect(screen.getByRole("combobox", {name: sortLabel})).toHaveValue("date-asc");
+});
+
+it.each(["network", "quota"])("préserve le tri après erreur de continuation : %s", async failure => {
+  const fetchMock = vi.fn().mockResolvedValueOnce(page([
+    withDate("old", "2025-01-01T00:00:00Z"), withDate("new", "2026-12-01T00:00:00Z"),
+  ], {next_page_token: "next", next_page_signature: signature}));
+  if (failure === "network") fetchMock.mockRejectedValueOnce(new TypeError("offline"));
+  else fetchMock.mockResolvedValueOnce({ok: false, json: async () => ({error: {code: "daily_limit_reached", message: "Quota simulé"}})});
+  await firstPage(fetchMock);
+  chooseSort("date-desc");
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  await screen.findByRole("alert");
+  expect(titles()).toEqual(["new", "old"]);
+  expect(screen.getByRole("combobox", {name: sortLabel})).toHaveValue("date-desc");
+  chooseSort("date-asc");
+  expect(titles()).toEqual(["old", "new"]);
+  expect(screen.getByText(/2 vidéo\(s\) examinée/)).toBeVisible();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+it("conserve le mode après une nouvelle recherche et repart en pertinence au remontage", async () => {
+  const source = [withDate("old", "2025-01-01T00:00:00Z"), withDate("new", "2026-12-01T00:00:00Z")];
+  const fetchMock = vi.fn().mockResolvedValue(page(source));
+  const {form, unmount} = await firstPage(fetchMock);
+  chooseSort("date-desc");
+  fireEvent.change(screen.getByRole("textbox", {name: "Mot-clé"}), {target: {value: "typescript"}});
+  fireEvent.submit(form);
+  await screen.findByRole("combobox", {name: sortLabel});
+  expect(titles()).toEqual(["new", "old"]);
+  expect(screen.getByRole("combobox", {name: sortLabel})).toHaveValue("date-desc");
+  expect(screen.getByText(/1 page\(s\) chargée/)).toBeVisible();
+  expect(screen.getByText(/2 vidéo\(s\) examinée/)).toBeVisible();
+  expect(new URL(fetchMock.mock.calls[1][0], "http://test").searchParams.toString()).toBe("q=typescript");
+  unmount();
+  const fresh = render(<VideoSearch />);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  fireEvent.change(screen.getByRole("textbox", {name: "Mot-clé"}), {target: {value: "python"}});
+  accept();
+  fireEvent.submit(fresh.container.querySelector("form")!);
+  await screen.findByRole("combobox", {name: sortLabel});
+  expect(screen.getByRole("combobox", {name: sortLabel})).toHaveValue("relevance");
+  expect(titles()).toEqual(["old", "new"]);
+});
+
+it("conserve le mode sur une page entièrement filtrée et trie la seconde", async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page([], {examined_count: 50, filtered_out_count: 50, next_page_token: "next", next_page_signature: signature}))
+    .mockResolvedValueOnce(page([withDate("old", "2025-01-01T00:00:00Z"), withDate("new", "2026-12-01T00:00:00Z")], {page_number: 2, searches_remaining: 18}));
+  await firstPage(fetchMock);
+  chooseSort("date-desc");
+  expect(screen.getByText(/Aucune vidéo ne correspond/)).toBeVisible();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  await screen.findByText(/2 page\(s\) chargée/);
+  expect(titles()).toEqual(["new", "old"]);
+  expect(screen.getByText(/52 vidéo\(s\) examinée\(s\), 2 retenue\(s\), 50 écartée/)).toBeVisible();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});

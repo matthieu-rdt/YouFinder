@@ -11,6 +11,7 @@ describe("Accueil", () => {
     const page = render(<Home />);
     expect(screen.getByRole("heading", { level: 1, name: "YouFinder" })).toBeVisible();
     expect(screen.getByText(/ne représentent pas une analyse exhaustive/)).toBeVisible();
+    expect(screen.getByText(/Un tri chronologique local est disponible sur les vidéos déjà chargées/)).toBeVisible();
     page.unmount();
     render(<Home />);
     expect(fetchMock).not.toHaveBeenCalled();

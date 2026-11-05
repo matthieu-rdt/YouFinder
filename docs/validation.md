@@ -203,3 +203,57 @@ Les compteurs cumulés sont distincts du nombre de vidéos uniques affichées : 
 La recette navigateur sous Compose complète les vérifications précédentes. Elle n’atteste pas d’une exécution des suites automatisées ou du build dans les conteneurs, ni d’une vérification individuelle de tous les points de la liste de recette initiale (notamment mobile et accessibilité). Les mentions antérieures de recette restante décrivent l’état avant ce retour utilisateur ; la recette des huit scénarios est désormais déclarée réussie. Les limites techniques documentées restent applicables.
 
 Cette mise à jour porte uniquement sur les deux documents de validation et de rapport de phase 4. Aucune nouvelle recherche YouTube, aucun test supplémentaire, aucun commit Git ni déploiement n’a été effectué par Codex pour cette tâche.
+
+## Phase 5 — tri chronologique local — 2026-11-04
+
+Implémentation autorisée sur `feat/youtube-date-sorting`. Tri exclusivement frontend sur les vidéos uniques déjà chargées, avec liste source préservée et aucun changement de pagination ou backend. La modification préexistante de `AGENTS.md` a été laissée intacte.
+
+### Vérifications automatisées réellement exécutées
+
+| Vérification | Résultat réel |
+| --- | --- |
+| `npm test` depuis `frontend/`, Node 24.22.2 ARM64 | **68 tests réussis dans 5 fichiers**, y compris après les dernières modifications de code et tests |
+| `npm run typecheck` dans `.phase5-validation` | **Réussi** : génération des types Next.js et TypeScript |
+| `NEXT_TELEMETRY_DISABLED=1 npm run build` dans cette même copie | **Réussi avec Turbopack** : compilation, TypeScript et génération statique |
+| `/tmp/youfinder-venv/bin/python -m pytest backend -q` | **145 tests réussis**, Python 3.11.2, code backend inchangé |
+| `git diff --check` | Réussi |
+
+Les exécutables Node et Python temporaires et les dépendances existantes ont été réutilisés, sans installation ni ajout de dépendance dans cette phase. Le typecheck et le build ont utilisé une copie isolée du frontend et de `node_modules`, liens internes préservés, dans `.phase5-validation`. Ce dossier temporaire a été retiré après vérification. Le cache `.next` du serveur de développement n’a pas été utilisé ou remplacé par ces commandes.
+
+Couverture ajoutée : 16 tests unitaires de tri et 8 cas d’intégration, plus une assertion d’explication du tri local dans le test existant de l’accueil. Les 44 tests frontend de phase 4 restent inclus dans les 68 tests exécutés. Vérifications : trois modes, stabilité, immutabilité, dates absentes/invalides/impossibles/sans fuseau, décalages UTC, fractions au-delà des millisecondes, calendrier bissextile, listes vides, page 2 fusionnée et dédupliquée, compteurs inchangés, retour à la pertinence, tri modifié pendant une continuation, erreurs/quota, maintien du mode après nouvelle recherche et retour au défaut au remontage. Les tests existants de filtres, dates UTC, consentement, doubles clics et absence d’appel automatique sont conservés.
+
+Les données sont entièrement simulées. Les tests frontend remplacent `fetch` ; les tests backend interceptent Google via les transports existants. Aucun appel YouTube réel ni quota réel consommé.
+
+### Limites et recette manuelle prévue lors de l’implémentation
+
+- Aucune erreur de test, de typecheck ou de build rencontrée dans cette phase. L’exécution hors Compose ne vaut pas validation dans les images Docker ; Python utilisé : 3.11.2 au lieu du 3.13.18 des images.
+- Le tri accepte des dates avec fuseau et calendrier valide, années 0001 à 9999, secondes de 00 à 59 ; les secondes intercalaires sont traitées comme dates indisponibles. Les fractions fournies sont conservées sans arrondi.
+- Le formateur historique des cartes reste inchangé : l’affichage au jour UTC masque les différences d’heures et fractions, et sa validation est moins stricte que celle du tri.
+- La recette manuelle de phase 4 déjà rapportée ne valide pas le nouveau sélecteur. Aucun test visuel navigateur de phase 5 n’a été effectué ou rapporté ici.
+
+Recette phase 5 initialement prévue (avant le retour utilisateur consigné ci-dessous) : vérifier le sélecteur au clavier et sur mobile ; comparer les trois ordres ; constater l’absence d’appel réseau et le solde inchangé au changement de tri ; charger manuellement la deuxième page et revenir à la pertinence ; lancer une nouvelle recherche et vérifier le mode conservé ; recharger complètement et vérifier le retour à la pertinence sans recherche automatique. Les cas de dates invalides et d’erreur de continuation peuvent être vérifiés avec des données simulées. Tout essai YouTube réel reste distinct de cette validation automatisée et nécessite une autorisation.
+
+Aucune modification backend, Docker Compose, dépendance, volume ou secret ; aucune intervention OVH, aucun commit ni déploiement. Rapport et plan conservés dans [[codex-reports/phase-05]].
+
+
+## Clôture de la phase 5 — recette utilisateur — 2026-11-05
+
+**Statut : recette fonctionnelle de phase 5 clôturée sur la base des 9 scénarios validés manuellement par l’utilisateur.** Ces résultats sont déclarés par l’utilisateur ; ils ne proviennent pas de nouvelles vérifications exécutées par Codex.
+
+| Scénario | Résultat manuel rapporté |
+| --- | --- |
+| 1. Fonctionnement des trois modes de tri | Validé |
+| 2. Retour à « Pertinence YouTube » : restauration de l’ordre initial | Validé |
+| 3. Tri chronologique croissant correct | Validé |
+| 4. Tri chronologique décroissant correct | Validé |
+| 5. Changement de tri sans consommation de tentative YouTube | Validé |
+| 6. Conservation du tri après chargement de la deuxième page | Validé |
+| 7. Retour à la pertinence après pagination | Validé |
+| 8. Conservation du mode choisi lors d’une nouvelle recherche | Validé |
+| 9. Réinitialisation du tri après un rechargement complet | Validé |
+
+**Tests automatisés :** les résultats précédemment consignés restent inchangés : 68 tests frontend réussis dans 5 fichiers, 145 tests backend réussis, vérification TypeScript et build Turbopack réussis. Ils sont historiques et distincts de la présente recette utilisateur. Aucune suite de tests ni aucun build n’a été relancé pour cette clôture documentaire.
+
+La validation porte uniquement sur les 9 scénarios ci-dessus. Elle n’atteste pas de vérifications supplémentaires : utilisation au clavier, affichage mobile, absence d’appel réseau, absence de recherche automatique après rechargement, cas de dates invalides ou d’erreur de continuation, ni exécution des suites automatisées dans Compose. Les limites techniques déjà documentées restent applicables.
+
+Les mentions antérieures de recette à effectuer décrivent l’état avant ce retour utilisateur. Cette mise à jour concerne uniquement `docs/validation.md` et `docs/codex-reports/phase-05.md` : aucun code applicatif modifié, aucune nouvelle recherche YouTube ni vérification fonctionnelle exécutée par Codex, aucun commit Git, aucune intervention sur le VPS OVH ni aucun déploiement.
