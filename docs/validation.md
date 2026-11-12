@@ -375,3 +375,105 @@ Prévoir dans une phase future une étude de conservation de l’état de recher
 ### Périmètre de cette clôture documentaire
 
 Seuls `docs/validation.md` et `docs/codex-reports/phase-06.md` sont mis à jour. Aucun test automatisé, build ou recherche YouTube n’est relancé pour cette tâche ; le contrôle documentaire `git diff --check` a réussi. Aucun code applicatif modifié, commit Git créé, déploiement effectué ou intervention OVH réalisée. Les modifications préexistantes du workspace sont préservées.
+
+
+## Phase 6.1 — accueil compact et filtres repliables — 2026-11-12
+
+Implémentation autorisée sur `feat/ui-compact-search`. Les résultats ci-dessous sont exécutés par Codex avec données entièrement simulées ; ils sont distincts des confirmations utilisateur de phase 6. Plan initial et bilan dans [[codex-reports/phase-06.1]].
+
+### Tests et builds réellement exécutés
+
+Environnement Debian ARM64, Node 24.22.2 temporaire (archive vérifiée avec le SHA-256 officiel), dépendances projet existantes. Docker inaccessible : `docker compose ps --format json` échoue sur le socket, y compris après autorisation. Aucun service ni fichier Compose modifié. Tests dans `frontend/` ; types/builds dans `.phase61-validation`, copie isolée des sources, tests et dépendances sans toucher au cache `.next` du frontend.
+
+| Vérification | Résultat |
+| --- | --- |
+| Référence `npm test` avant changements | **88 tests réussis / 7 fichiers** |
+| Suite adaptée intermédiaire | **88 tests réussis / 7 fichiers** |
+| Suite avec premiers ajouts | **95 tests réussis / 7 fichiers** |
+| Suite finale `npm test` | **97 tests réussis / 7 fichiers** |
+| `npm run typecheck` final | **Réussi**, génération des types de routes et TypeScript |
+| Build Webpack de référence isolée | **Réussi** |
+| Premier build Turbopack isolé avec dépendances locales | **Réussi**, Next.js 16.4.3, cinq pages statiques |
+| Build Turbopack final, sandbox puis exécution autorisée | **Bloqué par l’environnement** : traitement CSS → création de processus → `binding to a port` → `Operation not permitted (os error 1)` |
+| `NEXT_TELEMETRY_DISABLED=1 npm run build -- --webpack` final | **Réussi**, compilation, TypeScript et cinq pages statiques |
+| Chromium sur build Webpack final, API simulée | **Réussi**, mesures et parcours ci-dessous |
+
+Le premier build Turbopack réussi ne valide pas le dernier build : le code applicatif n’a ensuite subi qu’une indentation, mais les tests ont été complétés et le build final a été tenté explicitement. Le blocage du port local n’est pas présenté comme une erreur applicative. Turbopack final reste à confirmer dans l’environnement Compose habituel.
+
+Les neuf tests ajoutés couvrent ouverture/repli et champs montés, compteur 0–5/zéro/grand entier/effacement, transmission des cinq critères repliés et nouvelle recherche, première erreur native, dates inversées sans perte des résultats/solde, restauration via `pageshow`, critères de continuation, borne finale non sérialisable et mot-clé invalide sans ouverture inutile. Les 88 tests antérieurs sont conservés ; les attentes de présentation de l’accueil et du fieldset sont adaptées. Aucun test backend relancé pour ce périmètre frontend.
+
+### Mesures UX réelles
+
+Mesures en pixels CSS arrondis, Chromium Headless Shell 158.0.8127.18 / Playwright 1.65.0, même viewport et même scénario avant/après : mot-clé `python`, consentement coché, champs avancés vides, une vidéo simulée et une continuation disponible. Le rendu de référence provient d’une copie prise avant modification ; les deux versions sont mesurées avec le même script. Le dernier passage utilise deux builds Webpack pour éviter une différence de moteur entre versions.
+
+« Avant formulaire » mesure la distance du haut de `main` au haut du formulaire, marges et attribution incluses. La hauteur du formulaire est son rectangle complet. « Début résultats » est la position verticale absolue du début de la synthèse, pas de la première carte. Avant recherche, cette synthèse n’existe pas ; le bas du formulaire initial est fourni séparément. Aucune réduction de taille globale ou de zoom n’est utilisée pour ces mesures.
+
+| Viewport | Avant formulaire, avant → après | Formulaire, avant → après fermé / ouvert | Début résultats, avant → après fermé / ouvert | Gain résultats, fermé |
+| --- | --- | --- | --- | --- |
+| 320 × 900 | 600 → 163 | 1627 → 704 / 1727 | 2291 → 931 / 1954 | 1360 px (59.4 %) |
+| 375 × 900 | 552 → 163 | 1447 → 600 / 1535 | 2063 → 827 / 1762 | 1236 px (59.9 %) |
+| 768 × 900 | 452 → 123 | 899 → 470 / 943 | 1415 → 657 / 1130 | 758 px (53.6 %) |
+| 1440 × 900 | 428 → 123 | 821 → 436 / 845 | 1313 → 623 / 1032 | 690 px (52.6 %) |
+
+Bas du formulaire au premier affichage, avant → après fermé : **2227 → 867 px** (320), **1999 → 763 px** (375), **1351 → 593 px** (768), **1249 → 559 px** (1440). Les filtres étaient toujours visibles dans la version antérieure : il n’existe pas d’état fermé historique à mesurer. Le formulaire ouvert est légèrement plus haut qu’avant (summary et indication ajoutés), mais le début global des résultats reste remonté grâce à l’en-tête compact. À 320 px, le panneau ouvert reste naturellement long ; il n’est pas présenté comme tenant dans un écran.
+
+Aucun débordement horizontal aux quatre largeurs, avant/après recherche et après ouverture. Zoom CSS de 200 % à 1440 px vérifié ouvert/fermé sans débordement ; ce contrôle de reflow ne remplace pas une recette avec zoom natif du navigateur.
+
+### Vérifications navigateur réellement effectuées
+
+- Filtres fermés au montage ; Tab/Maj+Tab, Entrée/Espace sur le summary natif ; champs fermés exclus de la tabulation, pas de soumission au dépliage.
+- Seuil négatif et fractionnaire replié, par clic et Entrée depuis le mot-clé, avec deux erreurs simultanées : ouverture, premier champ visible et focalisé, message affiché, zéro appel API.
+- Dates inversées et fin `9999-12-31` non sérialisable repliées : validation applicative, ouverture et focus, valeurs conservées, zéro appel API.
+- Cinq critères repliés transmis, zéro actif, entier `9007199254740993` intact, fin inclusive UTC au lendemain ; nouvelle recherche sans perte de valeurs.
+- Tri sans appel supplémentaire ; modification des critères puis continuation utilisant l’instantané soumis, limite à deux pages, doublon dédupliqué et focus du bouton disparu restauré vers le résumé.
+- Retrait du consentement : recherche désactivée ; destinations et comportement des liens légaux conservés.
+- Navigation réelle vers Conditions puis retour historique Chromium : les cinq valeurs sont restaurées nativement, compteur à 5, panneau fermé. Cela vérifie la réconciliation après retour sans ajouter de stockage applicatif. Le bfcache est désactivé par défaut dans cette exécution Playwright ; ce mécanisme précis n’est pas validé.
+- Pages légales sans débordement à 375 px. Aucune erreur JavaScript de page lors du passage final.
+
+HTML/assets des builds servis par interception Playwright sur `https://youfinder.test`, API simulée et autres destinations bloquées. Ce procédé vérifie le JavaScript et les interactions du navigateur, sans serveur Next actif, proxy réel, backend ou consommation de quota. Script temporaire : `/tmp/youfinder-ui-tools/compact.cjs` ; mesures brutes : `/tmp/youfinder-compact-results.json` ; captures `/tmp/youfinder-compact-{before,after}-{largeur}.png`. Ce script ponctuel n’est pas une nouvelle dépendance ni une suite CI du projet.
+
+### Problèmes et limites
+
+- Première extraction Python de Node incompatible avec la version hôte (`extractall(filter=...)`) ; extraction tar réussie après contrôle SHA-256. Une commande npm a été lancée à la racine sans `package.json`, puis corrigée avec le répertoire frontend.
+- Premier build temporaire Turbopack avec `node_modules` lié hors racine : paquet Next non résolu. Copie locale des dépendances dans la copie isolée, sans changer la configuration projet.
+- Téléchargement Chromium interrompu par saturation de `/tmp` ; téléchargement repris dans le cache ignoré du frontend. DNS interdit en sandbox puis téléchargement autorisé. Bibliothèques manquantes extraites d’archives Debian téléchargées par apt, sans installation système ; lancement Chromium autorisé hors sandbox après échec de restriction locale.
+- Premier script navigateur : sélecteur `role=alert` ambigu avec l’annonceur de routes Next. Sélecteur précisé sur `#search-error`, puis passage complet réussi ; aucune correction applicative nécessaire pour cette erreur du script.
+- Docker reste inaccessible et le build Turbopack final est bloqué comme décrit ci-dessus. Les outils et copies de validation sont temporaires, sans modification des manifestes/lockfiles.
+
+### Recette utilisateur restante au bilan initial
+
+**Implémentation et vérifications Codex terminées ; recette utilisateur de phase 6.1 non encore validée.** Vérifier dans l’environnement Compose habituel : tests/types/build Turbopack final, gain de confort, filtres fermés/ouverts, soumission des critères masqués, erreurs natives/applicatives, nouvelle recherche, consentement, tri et pagination. Confirmer Safari/macOS, mobile réel, zoom navigateur natif 200 %, parcours clavier détaillé et écoute avec lecteur d’écran. Les viewports simulés et le zoom CSS ne valident pas ces appareils/contrôles ; les réserves héritées de phase 6 restent ouvertes sans confirmation utilisateur.
+
+La disparition des résultats après navigation vers les pages légales reste une limitation observée sans attribution à la phase 6 ; aucune persistance ni correction n’est ajoutée. Aucun changement backend/API/quota/règles métier/tri/pagination/Compose, aucun appel YouTube réel, secret exposé, commit, volume supprimé, accès OVH ou déploiement.
+
+Contrôles finaux : `git diff --check` réussi ; nouveau rapport non suivi vérifié explicitement par `git diff --no-index --check /dev/null docs/codex-reports/phase-06.1.md`, sans erreur de whitespace (code 1 attendu pour un contenu différent). Copies et bibliothèques de validation déplacées après les vérifications dans le cache ignoré `frontend/node_modules/.cache/phase61-*` ; aucun fichier de validation temporaire à livrer.
+
+
+## Clôture documentaire de la phase 6.1 — 2026-11-12
+
+**Statut : recette utilisateur de phase 6.1 clôturée sur la base des 14 scénarios validés par l’utilisateur, avec maintien des réserves non testées.** Le plan initial, le bilan d’implémentation, les mesures UX et les résultats historiques sont conservés. Les mentions antérieures de recette restante décrivent l’état avant ce retour utilisateur.
+
+### Recette utilisateur confirmée
+
+L’utilisateur déclare les **14 scénarios de recette validés**, y compris le compteur de critères renseignés avec la valeur numérique **0** : zéro compte comme un critère renseigné, contrairement à une chaîne vide. Le détail individuel des 14 scénarios n’est pas fourni dans ce retour ; aucune liste supplémentaire ni validation exhaustive n’est déduite.
+
+Cette recette est un retour utilisateur, distinct des tests automatisés et des parcours Chromium précédemment exécutés par Codex. Elle ne lève pas les contrôles explicitement non testés ci-dessous.
+
+### Tests automatisés et build Docker
+
+- **Résultats historiques Codex conservés** : 97 tests frontend réussis dans 7 fichiers, typecheck réussi, build Webpack final réussi et contrôles Chromium avec réponses API simulées réussis, dans les environnements et avec les limites déjà consignés.
+- **Build Turbopack réussi dans Docker, confirmé par l’utilisateur.** Codex n’a pas exécuté ce build ni vérifié directement sa sortie pour cette clôture. La commande précise, la durée et les détails de sortie ne sont pas fournis dans ce retour et ne sont pas reconstitués.
+- Cette confirmation complète le blocage historique du build Turbopack final dans l’environnement Codex (`binding to a port: Operation not permitted`), sans l’effacer ni le qualifier d’erreur applicative. Le build est désormais consigné comme réussi dans Docker côté utilisateur.
+- Ce retour ne confirme pas de nouvelle exécution des suites frontend ou du typecheck dans Docker, ni une validation en production. Aucun test automatisé, build, navigateur ou recherche YouTube n’a été relancé par Codex pour cette mise à jour documentaire.
+
+### Réserves conservées et limites
+
+**Mobile réel, Safari et lecteur d’écran : non testés, non validés.** Les contrôles sur des viewports simulés ne remplacent pas un appareil réel ni ces environnements.
+
+Les autres limites existantes restent applicables : bfcache non vérifié, zoom CSS distinct du zoom navigateur natif, contrastes/états non échantillonnés et contrôles clavier/accessibilité détaillés non individuellement attestés par ce retour. La validation globale des 14 scénarios ne permet pas d’inventer une confirmation spécifique de ces contrôles. Les limites des vérifications Codex (Docker inaccessible, rendu servi par interception sans proxy ni backend réel) restent historiques et distinctes du build Docker confirmé par l’utilisateur.
+
+La disparition des résultats au retour des pages légales reste une limitation observée, sans attribution démontrée à la phase 6. Aucune persistance ni correction n’est ajoutée ; l’étude de conservation de l’état de recherche reste prévue pour une phase future. Ces réserves ne sont pas présentées comme des régressions confirmées.
+
+### Périmètre de la clôture
+
+Seuls `docs/validation.md` et `docs/codex-reports/phase-06.1.md` sont mis à jour pour cette clôture. Aucun code applicatif modifié, commit créé, volume supprimé, déploiement ou intervention OVH effectué. Les modifications préexistantes du workspace sont préservées.

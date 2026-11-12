@@ -99,3 +99,18 @@ Le formulaire conserve ses validations, champs et conversions UTC. Les filtres r
 Les effets React ajoutés servent uniquement au focus : résumé de pagination après disparition du bouton si l’utilisateur y était resté ; annulation de cette restauration en cas de déplacement pendant l’attente. Aucune requête dans ces effets. Le statut de chargement concis et l’alerte d’erreur sont séparés des cartes, qui ne sont plus dans une région live globale. Styles de focus communs et contrôles natifs, sans dépendance UI supplémentaire.
 
 Décision lisible dans Obsidian ; preuves et limites dans [[validation]] et [[codex-reports/phase-06]]. Aucun backend, contrat API, module de tri, filtre métier, configuration Compose ou service modifié.
+
+
+# Décision phase 6.1 — accueil compact et filtres natifs
+
+Date : 2026-11-12. Plan et précisions validés par l’utilisateur ; implémentation sur `feat/ui-compact-search`, recette utilisateur restante.
+
+L’en-tête réunit YouFinder et l’attribution officielle YouTube. Les introductions redondantes sont retirées ; les limites et le coût par page restent visibles sous forme compacte. Le solde inconnu initial devient une note, tandis que les composants de synthèse et de plafond après réponse restent inchangés.
+
+Le fieldset de cinq filtres est désormais dans un `details/summary` natif fermé au premier montage. Les champs restent montés et activés : `FormData` continue de transmettre leurs valeurs sans conversion numérique. Seul le nombre de champs renseignés est stocké pour la présentation, mis à jour à la saisie, au montage et sur `pageshow` pour réconcilier une restauration native. Zéro compte, chaîne vide ne compte pas ; une valeur invalide renseignée compte sans autoriser la recherche. Les critères édités s’appliquent à la prochaine recherche, la continuation garde son instantané existant.
+
+La validation HTML est conservée. Le formulaire intercepte `invalid` en capture, bloque l’affichage natif de l’erreur pour éviter de focaliser un champ masqué, ouvre le panneau et focalise le premier champ invalide. Un verrou limité au tour d’événements empêche les événements invalid suivants de voler le focus. Le message visible est une alerte ; `aria-invalid` et `aria-errormessage` relient le champ à l’erreur. Les gardes applicatives existantes ouvrent aussi le panneau avant de focaliser une date ou un seuil invalide. Aucune requête ni péremption du solde sur erreur locale.
+
+Aucun état React d’ouverture, accordéon personnalisé, stockage navigateur, effet réseau ou nouvelle dépendance projet. Les champs non contrôlés conservent leurs valeurs sur la même page. La restauration éventuelle des champs par le navigateur ne constitue pas une persistance applicative des résultats ; le consentement reste contrôlé et requis. Backend, API, règles de filtres, tri, pagination, quota et Compose inchangés. La limitation de navigation légale observée en phase 6 n’est pas corrigée ici.
+
+Contrôles Chromium avec données simulées, mesures, limites d’environnement et recette restante : [[validation]] et [[codex-reports/phase-06.1]].

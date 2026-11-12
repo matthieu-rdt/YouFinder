@@ -469,6 +469,7 @@ it("conserve le mode sur une page entièrement filtrée et trie la seconde", asy
 
 it("regroupe les filtres et associe les aides sans appel automatique", () => {
   const {fetchMock} = setup();
+  fireEvent.click(screen.getByText(/Filtres avancés — 0 critères renseignés/));
   const group = screen.getByRole("group", {name: "Filtres avancés — facultatifs"});
   expect(within(group).getByLabelText("Publié jusqu’au (UTC, jour inclus)")).toHaveAccessibleDescription(/jour de fin est inclus/);
   expect(within(group).getByLabelText("Abonnés maximum")).toHaveAccessibleDescription(/trois chiffres significatifs/);
@@ -536,4 +537,150 @@ it("ne reprend pas le focus si l’utilisateur rejoint le tri pendant la continu
   select.focus();
   await act(async () => resolve(page([video], {page_number: 2})));
   expect(select).toHaveFocus();
+});
+
+
+function filtersPanel() {
+  return screen.getByText(/Filtres avancés — \d+ critère/).closest("details")!;
+}
+
+function toggleFilters() {
+  fireEvent.click(filtersPanel().querySelector("summary")!);
+}
+
+it("ferme les filtres au montage et conserve les champs montés et activés au repli sans requête", () => {
+  const {fetchMock} = setup();
+  const panel = filtersPanel();
+  expect(panel.open).toBe(false);
+  toggleFilters();
+  expect(panel.open).toBe(true);
+  fireEvent.change(screen.getByLabelText("Vues minimum"), {target: {value: "0"}});
+  toggleFilters();
+  expect(panel.open).toBe(false);
+  expect(screen.getByLabelText("Vues minimum")).toBeEnabled();
+  expect(screen.getByLabelText("Vues minimum")).toHaveValue(0);
+  expect(panel.querySelector("summary")).toHaveTextContent("Filtres avancés — 1 critère renseigné");
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("compte les cinq champs individuellement sans convertir zéro ou les grands entiers", () => {
+  const {fetchMock} = setup();
+  toggleFilters();
+  const fields = [
+    ["Publié à partir du (UTC)", "2026-01-01"], ["Publié jusqu’au (UTC, jour inclus)", "2026-02-01"],
+    ["Vues minimum", "9007199254740993"], ["Abonnés maximum", "0"], ["Durée minimum (minutes)", "-1"],
+  ];
+  fields.forEach(([label, value], i) => {
+    fireEvent.change(screen.getByLabelText(label), {target: {value}});
+    expect(filtersPanel().querySelector("summary")).toHaveTextContent(`${i + 1} critère`);
+  });
+  toggleFilters();
+  expect(filtersPanel().querySelector("summary")).toHaveTextContent("5 critères renseignés");
+  toggleFilters();
+  fields.forEach(([label]) => fireEvent.change(screen.getByLabelText(label), {target: {value: ""}}));
+  toggleFilters();
+  expect(filtersPanel().querySelector("summary")).toHaveTextContent("0 critères renseignés");
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("transmet les cinq critères repliés et les conserve lors d’une nouvelle recherche", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(page([]));
+  const {form} = setup(fetchMock);
+  accept();
+  toggleFilters();
+  const fields = [["Publié à partir du (UTC)", "2026-01-01"], ["Publié jusqu’au (UTC, jour inclus)", "2026-02-01"],
+    ["Vues minimum", "9007199254740993"], ["Abonnés maximum", "0"], ["Durée minimum (minutes)", "3"]];
+  fields.forEach(([label, value]) => fireEvent.change(screen.getByLabelText(label), {target: {value}}));
+  toggleFilters();
+  fireEvent.submit(form);
+  await screen.findByText(/Aucune vidéo ne correspond/);
+  expect(filtersPanel().open).toBe(false);
+  const params = new URL(fetchMock.mock.calls[0][0], "http://test").searchParams;
+  expect(Object.fromEntries(params)).toEqual({q: "python", published_after: "2026-01-01T00:00:00Z", published_before: "2026-02-02T00:00:00Z", min_views: "9007199254740993", max_subscribers: "0", min_duration_minutes: "3"});
+  fireEvent.submit(form);
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.getByRole("button", {name: "Rechercher sur YouTube"})).toBeEnabled());
+  expect(fetchMock.mock.calls[1][0]).toBe(fetchMock.mock.calls[0][0]);
+  expect(filtersPanel().querySelector("summary")).toHaveTextContent("5 critères renseignés");
+  expect(screen.getByRole("checkbox")).toBeChecked();
+  expect(screen.getByRole("textbox")).toHaveValue("python");
+});
+
+it("rouvre les filtres sur invalidité native et focalise seulement le premier champ invalide", () => {
+  const {fetchMock} = setup();
+  const first = screen.getByLabelText("Vues minimum");
+  const second = screen.getByLabelText("Abonnés maximum");
+  fireEvent.change(first, {target: {value: "-1"}});
+  fireEvent.change(second, {target: {value: "-2"}});
+  fireEvent.invalid(first);
+  fireEvent.invalid(second);
+  expect(filtersPanel().open).toBe(true);
+  expect(first).toHaveFocus();
+  expect(first).toHaveAttribute("aria-invalid", "true");
+  expect(first).toHaveAttribute("aria-errormessage", "search-error");
+  expect(screen.getByRole("alert")).not.toBeEmptyDOMElement();
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("rouvre les dates inversées repliées sans effacer les résultats ni périmer le solde", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(page([video]));
+  const {form} = await firstPage(fetchMock);
+  fireEvent.change(screen.getByLabelText("Publié à partir du (UTC)"), {target: {value: "2026-02-01"}});
+  fireEvent.change(screen.getByLabelText("Publié jusqu’au (UTC, jour inclus)"), {target: {value: "2026-01-01"}});
+  fireEvent.submit(form);
+  expect(filtersPanel().open).toBe(true);
+  expect(screen.getByLabelText("Publié jusqu’au (UTC, jour inclus)")).toHaveFocus();
+  expect(screen.getByRole("article")).toBeVisible();
+  expect(screen.getByRole("meter")).toBeVisible();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it("réconcilie le compteur après restauration native signalée par pageshow sans requête", () => {
+  const {fetchMock} = setup();
+  (screen.getByLabelText("Abonnés maximum") as HTMLInputElement).value = "0";
+  (screen.getByLabelText("Vues minimum") as HTMLInputElement).value = "9007199254740993";
+  fireEvent(window, new Event("pageshow"));
+  expect(filtersPanel().querySelector("summary")).toHaveTextContent("2 critères renseignés");
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("conserve l’instantané soumis pour la deuxième page après modification de filtres repliés", async () => {
+  const fetchMock = vi.fn().mockResolvedValueOnce(page([video], {next_page_token: "next", next_page_signature: signature}))
+    .mockResolvedValueOnce(page([video], {page_number: 2}));
+  const {form} = setup(fetchMock);
+  accept();
+  fireEvent.change(screen.getByLabelText("Vues minimum"), {target: {value: "0"}});
+  fireEvent.submit(form);
+  await screen.findByRole("article");
+  toggleFilters();
+  fireEvent.change(screen.getByLabelText("Vues minimum"), {target: {value: "1000"}});
+  toggleFilters();
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  await screen.findByText(/Limite de deux pages atteinte/);
+  expect(new URL(fetchMock.mock.calls[1][0], "http://test").searchParams.get("min_views")).toBe("0");
+  expect(screen.getAllByRole("article")).toHaveLength(1);
+});
+
+
+it("ouvre une borne de fin non sérialisable sans appel et conserve sa valeur", () => {
+  const {form, fetchMock} = setup();
+  accept();
+  const field = screen.getByLabelText("Publié jusqu’au (UTC, jour inclus)");
+  fireEvent.change(field, {target: {value: "9999-12-31"}});
+  fireEvent.submit(form);
+  expect(filtersPanel().open).toBe(true);
+  expect(field).toHaveFocus();
+  expect(field).toHaveValue("9999-12-31");
+  expect(screen.getByRole("alert")).toHaveTextContent(/date de fin UTC valide/);
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("focalise un mot-clé invalide sans ouvrir les filtres", () => {
+  const {form, fetchMock} = setup();
+  accept();
+  fireEvent.change(screen.getByRole("textbox"), {target: {value: "   "}});
+  fireEvent.submit(form);
+  expect(screen.getByRole("textbox")).toHaveFocus();
+  expect(filtersPanel().open).toBe(false);
+  expect(fetchMock).not.toHaveBeenCalled();
 });
