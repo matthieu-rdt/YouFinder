@@ -1,14 +1,20 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { isSearchResponse, nextUtcDayStart, type SearchResponse } from "../lib/youtube";
 import { sortVideos, type VideoSortMode } from "../lib/video-sort";
 import { VideoCard } from "./video-card";
+import { SearchSummary } from "./search-summary";
+import { DailyAttempts } from "./daily-attempts";
 
 export function VideoSearch() {
   const [result, setResult] = useState<SearchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [balanceStale, setBalanceStale] = useState(false);
+  const paginationFocus = useRef(false);
+  const paginationButton = useRef<HTMLButtonElement>(null);
+  const paginationSummary = useRef<HTMLParagraphElement>(null);
   const [accepted, setAccepted] = useState(false);
   const inFlight = useRef(false);
   const criteria = useRef<string | null>(null);
@@ -17,6 +23,27 @@ export function VideoSearch() {
   const [continuationBlocked, setContinuationBlocked] = useState(false);
   const [sortMode, setSortMode] = useState<VideoSortMode>("relevance");
   const displayedVideos = sortVideos(result?.items ?? [], sortMode);
+
+  useEffect(() => {
+    if (pages === 2 && paginationFocus.current) {
+      paginationSummary.current?.focus();
+      paginationFocus.current = false;
+    }
+  }, [pages]);
+
+  useEffect(() => {
+    if (!loading) return;
+    // A user moving elsewhere during continuation keeps their chosen focus.
+    function cancelRestoration(event: Event) {
+      if (event.target !== paginationButton.current) paginationFocus.current = false;
+    }
+    document.addEventListener("pointerdown", cancelRestoration);
+    document.addEventListener("focusin", cancelRestoration);
+    return () => {
+      document.removeEventListener("pointerdown", cancelRestoration);
+      document.removeEventListener("focusin", cancelRestoration);
+    };
+  }, [loading]);
 
   async function load(params: URLSearchParams, append: boolean) {
     if (inFlight.current || (append && pagesLoaded.current !== 1)) return;
@@ -27,14 +54,17 @@ export function VideoSearch() {
       const response = await fetch(`/api/videos/search?${params}`, { cache: "no-store" });
       const body = await response.json();
       if (!response.ok) {
+        setBalanceStale(true);
         const code = body.error?.code;
         if (append && ["invalid_page_token", "daily_limit_reached", "youtube_quota_exceeded"].includes(code)) {
           setContinuationBlocked(true);
         }
         setError(`${body.error?.message ?? "La recherche a échoué."} Une tentative peut avoir été consommée ; le solde affiché peut être périmé. Aucune nouvelle tentative automatique.`);
       } else if (!isSearchResponse(body) || body.page_number !== (append ? 2 : 1)) {
+        setBalanceStale(true);
         setError("Réponse de recherche invalide. Une tentative peut avoir été consommée.");
       } else {
+        setBalanceStale(false);
         const repeated = append && body.next_page_token === params.get("page_token");
         if (repeated) setError("Jeton de continuation répété : parcours arrêté.");
         pagesLoaded.current = append ? 2 : 1;
@@ -59,6 +89,7 @@ export function VideoSearch() {
         });
       }
     } catch {
+      setBalanceStale(true);
       setError("Connexion à l’application impossible. Une tentative peut avoir été consommée ; le solde affiché peut être périmé. Aucune nouvelle tentative automatique.");
     } finally {
       inFlight.current = false;
@@ -113,54 +144,65 @@ export function VideoSearch() {
     await load(params, false);
   }
 
-  // Aucun effet au montage, stockage du formulaire ou rechargement automatique.
+  // Aucun appel au montage, stockage du formulaire ou rechargement automatique.
   return (
     <section aria-label="Recherche de vidéos YouTube">
       <a href="https://www.youtube.com/" className="mb-4 inline-block" aria-label="Développé avec YouTube">
         <img src="/developed-with-youtube.png" alt="Developed with YouTube" width={233} height={82} />
       </a>
-      <form onSubmit={submit} className="grid gap-4 rounded-xl border border-slate-700 p-5">
-        <label className="grid gap-2">Mot-clé<input name="q" required maxLength={200} autoComplete="off" className="rounded bg-slate-800 p-3" /></label>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="grid gap-2">Publié à partir du (UTC)<input type="date" name="after" className="rounded bg-slate-800 p-3" /></label>
-          <label className="grid gap-2">Publié jusqu’au (UTC, jour inclus)<input type="date" name="before" className="rounded bg-slate-800 p-3" /></label>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <label className="grid gap-2">Vues minimum<input type="number" name="min_views" min="0" step="1" className="rounded bg-slate-800 p-3" /></label>
-          <label className="grid gap-2">Abonnés maximum<input type="number" name="max_subscribers" min="0" step="1" aria-describedby="subscriber-notice" className="rounded bg-slate-800 p-3" /></label>
-          <label className="grid gap-2">Durée minimum (minutes)<input type="number" name="min_duration_minutes" min="0" step="1" className="rounded bg-slate-800 p-3" /></label>
-        </div>
-        <p id="subscriber-notice" className="text-sm text-slate-400">Le filtre abonnés utilise le nombre public arrondi vers le bas à trois chiffres significatifs par YouTube. Il ne garantit pas un plafond sur le nombre exact. Les valeurs masquées ou indisponibles sont exclues lorsque ce filtre est renseigné.</p>
-        <p className="text-sm text-slate-400">Tous les filtres se combinent. Une donnée indisponible est exclue si son filtre est renseigné. Le filtre durée exclut les directs en cours et programmés. Les critères restent renseignés pendant cette session de page.</p>
+      <form onSubmit={submit} aria-describedby={error ? "search-error" : undefined} className="panel grid gap-5">
+        <h2 className="text-xl font-semibold">Rechercher des vidéos</h2>
+        <label className="grid gap-2">Mot-clé<input name="q" aria-describedby="keyword-help" required maxLength={200} autoComplete="off" className="rounded bg-slate-800 p-3" /></label>
+        <p id="keyword-help" className="text-sm text-slate-300">Un mot-clé de 1 à 200 caractères. Aucun appel avant votre recherche.</p>
+        <fieldset className="min-w-0 space-y-4 rounded-xl border border-slate-700 p-4 sm:p-5">
+          <legend className="px-2 font-semibold">Filtres avancés — facultatifs</legend>
+          <p id="date-help" className="text-sm text-slate-300">Publication en UTC : le jour de fin est inclus, quel que soit le fuseau du navigateur.</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="grid gap-2">Publié à partir du (UTC)<input type="date" aria-describedby="date-help" name="after" className="rounded bg-slate-800 p-3" /></label>
+            <label className="grid gap-2">Publié jusqu’au (UTC, jour inclus)<input type="date" aria-describedby="date-help" name="before" className="rounded bg-slate-800 p-3" /></label>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <label className="grid gap-2">Vues minimum<input type="number" name="min_views" min="0" step="1" className="rounded bg-slate-800 p-3" /></label>
+            <label className="grid gap-2">Abonnés maximum<input type="number" name="max_subscribers" min="0" step="1" aria-describedby="subscriber-notice" className="rounded bg-slate-800 p-3" /></label>
+            <label className="grid gap-2">Durée minimum (minutes)<input type="number" name="min_duration_minutes" min="0" step="1" className="rounded bg-slate-800 p-3" /></label>
+          </div>
+          <p id="subscriber-notice" className="text-sm text-slate-300">Le filtre abonnés utilise le nombre public arrondi vers le bas à trois chiffres significatifs par YouTube. Il ne garantit pas un plafond sur le nombre exact. Les valeurs masquées ou indisponibles sont exclues lorsque ce filtre est renseigné.</p>
+          <p className="text-sm text-slate-300">Tous les filtres se combinent. Une donnée indisponible est exclue si son filtre est renseigné. Le filtre durée exclut les directs en cours et programmés. Les critères restent renseignés pendant cette session de page.</p>
+        </fieldset>
         <label className="flex items-start gap-3 text-sm"><input type="checkbox" required checked={accepted} onChange={event => setAccepted(event.target.checked)} className="mt-1" /><span>J’accepte la <a className="underline" href="/confidentialite" target="_blank" rel="noopener noreferrer">politique de confidentialité</a> et les <a className="underline" href="/conditions" target="_blank" rel="noopener noreferrer">conditions d’utilisation</a>, y compris les <a className="underline" href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">conditions YouTube</a>.</span></label>
-        <button disabled={loading || !accepted} type="submit" className="w-fit rounded bg-red-600 px-5 py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-50">{loading ? "Recherche en cours…" : "Rechercher sur YouTube"}</button>
-        <p className="text-sm text-slate-400">Chaque page demandée consomme une tentative du plafond quotidien, même en cas d’erreur Google. Aucun appel automatique au chargement ou au rafraîchissement de cette page.</p>
+        <button disabled={loading || !accepted} type="submit" className="primary-button w-full sm:w-fit">{loading && !result ? "Recherche en cours…" : "Rechercher sur YouTube"}</button>
+        <p className="text-sm text-slate-300">Chaque page demandée consomme une tentative du plafond quotidien, même en cas d’erreur Google. Aucun appel automatique au chargement ou au rafraîchissement de cette page.</p>
       </form>
-      <div aria-live="polite" aria-busy={loading} className="mt-5">
-        {loading && <p role="status">Recherche auprès de YouTube…</p>}
-        {error && <p role="alert" className="rounded border border-red-400 p-4">{error}</p>}
+      <div className="mt-6 space-y-5">
+        <p role="status" className="text-sm text-sky-200">{loading ? result ? "Chargement de la deuxième page… Les résultats précédents restent affichés." : "Recherche auprès de YouTube…" : error ? "" : result ? "Résultats mis à jour." : ""}</p>
+        {error && <p id="search-error" role="alert" className="rounded-xl border border-red-400 bg-slate-900 p-4">{error}</p>}
+        {!result && !loading && <div className="panel space-y-3"><p>Votre exploration commence ici. Renseignez un mot-clé, puis lancez une recherche.</p><DailyAttempts remaining={null} limit={null} /></div>}
         {result && <>
-          <p>{pages} page(s) chargée(s) sur 2 maximum — 50 identifiants par page maximum.</p>
-          <p>Compteurs cumulés des pages : {result.examined_count} vidéo(s) examinée(s), {result.retained_count} retenue(s), {result.filtered_out_count} écartée(s) par les filtres.</p>
-          <p>{result.items.length} vidéo(s) unique(s) affichée(s). Les cumuls peuvent inclure des doublons entre pages.</p>
-          <p>{result.notice}</p>
-          <p>La page suivante utilise les critères de la recherche soumise. Pour appliquer les champs modifiés, lancez une nouvelle recherche.</p>
-          <p>{result.searches_remaining} tentative(s) restante(s) sur {result.daily_limit} aujourd’hui (Europe/Paris).</p>
-          {result.omitted_count > 0 && <p>{result.omitted_count} vidéo(s) devenue(s) indisponible(s) ont été omises.</p>}
-          {pages === 1 && result.next_page_token && <button type="button" onClick={loadNext}
-            disabled={loading || !accepted || continuationBlocked || result.searches_remaining === 0}
-            className="mt-4 rounded bg-red-600 px-5 py-3 disabled:opacity-50">Charger 50 vidéos supplémentaires</button>}
-          <p>{pages === 2 ? "Limite de deux pages atteinte (100 identifiants maximum)." : !result.next_page_token ? "Fin de pagination : aucune page suivante." : result.searches_remaining === 0 ? "Plafond quotidien atteint : aucune tentative restante." : "La deuxième page est facultative et consomme une tentative."}</p>
-          <label className="mt-4 grid w-fit gap-2">Trier les vidéos chargées
-            <select value={sortMode} onChange={event => setSortMode(event.target.value as VideoSortMode)}
-              aria-describedby="local-sort-notice" className="rounded bg-slate-800 p-3">
-              <option value="relevance">Pertinence YouTube : ordre initial</option>
-              <option value="date-desc">Date décroissante : plus récentes d’abord</option>
-              <option value="date-asc">Date croissante : plus anciennes d’abord</option>
-            </select>
-          </label>
-          <p id="local-sort-notice" className="text-sm text-slate-400">Tri local des vidéos déjà chargées, sans nouvel appel YouTube. Ce tri n’est pas une recherche exhaustive par date sur YouTube. Les dates absentes ou invalides sont placées à la fin des tris chronologiques.</p>
-          {result.items.length === 0 ? <p className="mt-4">Aucune vidéo ne correspond aux critères parmi les vidéos examinées.</p> : <ol className="mt-5 grid gap-5 sm:grid-cols-2">{displayedVideos.map(video => <li key={video.id}><VideoCard video={video} /></li>)}</ol>}
+          <SearchSummary result={result} uniqueCount={result.items.length} pages={pages} />
+          <DailyAttempts remaining={result.searches_remaining} limit={result.daily_limit} stale={balanceStale} pending={loading} />
+          <div className="panel space-y-4" aria-label="Organisation et pagination des résultats">
+            <h2 className="text-xl font-semibold">Résultats des pages chargées</h2>
+            <p className="text-sm text-slate-300">{result.notice}</p>
+            <p ref={paginationSummary} tabIndex={-1} className="rounded focus:outline-2 focus:outline-sky-300">{pages} page(s) chargée(s) sur 2 maximum — 50 identifiants par page maximum.</p>
+            <p className="text-sm text-slate-300">La page suivante utilise les critères de la recherche soumise. Pour appliquer les champs modifiés, lancez une nouvelle recherche.</p>
+            {pages === 1 && result.next_page_token && <button type="button" ref={paginationButton} onClick={event => { paginationFocus.current = event.currentTarget === document.activeElement; void loadNext(); }}
+              disabled={loading || !accepted || continuationBlocked || result.searches_remaining === 0}
+              className="primary-button w-full sm:w-fit">Charger 50 vidéos supplémentaires</button>}
+            {pages === 1 && result.next_page_token && <p className="text-sm text-slate-300">Jusqu’à 50 identifiants supplémentaires — une tentative. Le nombre de nouvelles cartes peut être inférieur.</p>}
+            <p>{pages === 2 ? "Limite de deux pages atteinte (100 identifiants maximum)." : !result.next_page_token ? "Fin de pagination : aucune page suivante." : result.searches_remaining === 0 ? "Plafond quotidien atteint : aucune tentative restante." : "La deuxième page est facultative et consomme une tentative."}</p>
+            <label className="grid min-w-0 gap-2 sm:max-w-lg">Trier les vidéos chargées
+              <select value={sortMode} onChange={event => setSortMode(event.target.value as VideoSortMode)}
+                aria-describedby="local-sort-notice" className="rounded bg-slate-800 p-3">
+                <option value="relevance">Pertinence YouTube : ordre initial</option>
+                <option value="date-desc">Date décroissante : plus récentes d’abord</option>
+                <option value="date-asc">Date croissante : plus anciennes d’abord</option>
+              </select>
+            </label>
+            <p id="local-sort-notice" className="text-sm text-slate-300">Tri local des vidéos déjà chargées, sans nouvel appel YouTube. Ce tri n’est pas une recherche exhaustive par date sur YouTube. Les dates absentes ou invalides sont placées à la fin des tris chronologiques.</p>
+          </div>
+          <div aria-busy={loading}>
+            {result.items.length === 0 ? <p className="panel">Aucune vidéo ne correspond aux critères parmi les vidéos examinées.</p> : <ol className="mt-5 grid gap-5 sm:grid-cols-2">{displayedVideos.map(video => <li className="min-w-0" key={video.id}><VideoCard video={video} /></li>)}</ol>}
+          </div>
         </>}
       </div>
     </section>

@@ -6,3 +6,28 @@ body {
   color: #f8fafc;
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Shared controls keep a visible focus on the dashboard and legal pages. */
+:where(a, button, input, select, summary):focus-visible {
+  outline: 3px solid #7dd3fc;
+  outline-offset: 4px;
+}
+
+input:not([type="checkbox"]), select {
+  min-width: 0;
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid #64748b;
+  color-scheme: dark;
+}
+
+input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; accent-color: #dc2626; }
+
+.panel { border: 1px solid #334155; border-radius: 16px; background: #0f172a; padding: clamp(16px, 3vw, 24px); }
+.primary-button { min-height: 48px; border-radius: 8px; background: #b91c1c; color: #fff; padding: 12px 20px; font-weight: 600; }
+.primary-button:hover:not(:disabled) { background: #991b1b; }
+.primary-button:disabled { cursor: not-allowed; background: #334155; color: #cbd5e1; }
+.quota-meter { accent-color: #38bdf8; }
+.quota-meter::-webkit-meter-bar { background: #334155; border: 0; border-radius: 8px; }
+.quota-meter::-webkit-meter-optimum-value { background: #38bdf8; border-radius: 8px; }
+.quota-meter::-moz-meter-bar { background: #38bdf8; }

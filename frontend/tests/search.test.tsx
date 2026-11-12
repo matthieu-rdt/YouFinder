@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VideoSearch } from "../src/components/video-search";
 import type { Video } from "../src/lib/youtube";
@@ -54,9 +54,9 @@ describe("Recherche", () => {
     expect(url.searchParams.get("published_after")).toBe("2026-01-01T00:00:00Z");
     expect(url.searchParams.get("published_before")).toBe("2026-02-02T00:00:00Z");
     expect(fetchMock.mock.calls[0][1]).toEqual({ cache: "no-store" });
-    expect(screen.getAllByRole("heading").map(node => node.textContent)).toEqual(["Titre simulé", "Deuxième résultat"]);
+    expect(screen.getAllByRole("heading", { level: 3 }).map(node => node.textContent)).toEqual(["Titre simulé", "Deuxième résultat"]);
     expect(screen.getAllByText("Indisponible")).toHaveLength(2);
-    expect(screen.getAllByText("0")).toHaveLength(2);
+    expect(screen.getAllByRole("article").map(card => within(card).getByText("0"))).toHaveLength(2);
     expect(screen.getAllByText("15:33")).toHaveLength(2);
     expect(screen.getByText(/19 tentative/)).toBeVisible();
     expect(screen.getByText(/ont été omises/)).toBeVisible();
@@ -197,7 +197,7 @@ it("charge exactement deux pages manuelles, déduplique et cumule sans confondre
   expect(await screen.findByText(/2 page\(s\) chargée/)).toBeVisible();
   expect(screen.getByText(/3 vidéo\(s\) examinée\(s\), 3 retenue/)).toBeVisible();
   expect(screen.getByText(/2 vidéo\(s\) unique/)).toBeVisible();
-  expect(screen.getAllByRole("heading").map(node => node.textContent)).toEqual(["Titre simulé", "Deuxième"]);
+  expect(screen.getAllByRole("heading", { level: 3 }).map(node => node.textContent)).toEqual(["Titre simulé", "Deuxième"]);
   const params = new URL(fetchMock.mock.calls[1][0], "http://test").searchParams;
   expect(params.get("page_token")).toBe("opaque+/= token");
   expect(params.get("page_signature")).toBe(signature);
@@ -326,11 +326,11 @@ it("affiche 100 vidéos au maximum en conservant l’ordre de deux pages de 50",
     .mockResolvedValueOnce(page(makeVideos(0), {next_page_token: "next", next_page_signature: signature}))
     .mockResolvedValueOnce(page(makeVideos(50), {page_number: 2, searches_remaining: 18}));
   await firstPage(fetchMock);
-  expect(screen.getAllByRole("heading")).toHaveLength(50);
+  expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(50);
   expect(fetchMock).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", {name: nextLabel}));
   await screen.findByText(/2 page\(s\) chargée/);
-  expect(screen.getAllByRole("heading").map(node => node.textContent)).toEqual(Array.from({length: 100}, (_, index) => `Vidéo ${index}`));
+  expect(screen.getAllByRole("heading", { level: 3 }).map(node => node.textContent)).toEqual(Array.from({length: 100}, (_, index) => `Vidéo ${index}`));
   expect(screen.getByText(/100 vidéo\(s\) unique/)).toBeVisible();
   expect(screen.queryByRole("button", {name: nextLabel})).not.toBeInTheDocument();
   expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -338,7 +338,7 @@ it("affiche 100 vidéos au maximum en conservant l’ordre de deux pages de 50",
 
 const sortLabel = "Trier les vidéos chargées";
 const withDate = (id: string, published_at: string | null): Video => ({ ...video, id, title: id, published_at });
-const titles = () => screen.getAllByRole("heading").map(node => node.textContent);
+const titles = () => screen.getAllByRole("heading", { level: 3 }).map(node => node.textContent);
 function chooseSort(value: string) {
   fireEvent.change(screen.getByRole("combobox", {name: sortLabel}), {target: {value}});
 }
@@ -465,4 +465,75 @@ it("conserve le mode sur une page entièrement filtrée et trie la seconde", asy
   expect(titles()).toEqual(["new", "old"]);
   expect(screen.getByText(/52 vidéo\(s\) examinée\(s\), 2 retenue\(s\), 50 écartée/)).toBeVisible();
   expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+it("regroupe les filtres et associe les aides sans appel automatique", () => {
+  const {fetchMock} = setup();
+  const group = screen.getByRole("group", {name: "Filtres avancés — facultatifs"});
+  expect(within(group).getByLabelText("Publié jusqu’au (UTC, jour inclus)")).toHaveAccessibleDescription(/jour de fin est inclus/);
+  expect(within(group).getByLabelText("Abonnés maximum")).toHaveAccessibleDescription(/trois chiffres significatifs/);
+  expect(screen.getByRole("textbox", {name: "Mot-clé"})).toHaveAccessibleDescription(/1 à 200/);
+  expect(screen.queryByRole("meter")).not.toBeInTheDocument();
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("garde un seul bouton de continuation avant les cartes et des annonces séparées", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(page([video], {next_page_token: "next", next_page_signature: signature}));
+  await firstPage(fetchMock);
+  const buttons = screen.getAllByRole("button", {name: nextLabel});
+  expect(buttons).toHaveLength(1);
+  expect(buttons[0].compareDocumentPosition(screen.getByRole("article")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getByRole("combobox", {name: sortLabel}).compareDocumentPosition(screen.getByRole("article")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getByRole("article").closest('[aria-live]')).toBeNull();
+  expect(screen.getByRole("status")).not.toContainElement(screen.getByRole("article"));
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it("masque le solde périmé après erreur et pendant la reprise, puis restaure la jauge sur succès", async () => {
+  let resolve!: (value: unknown) => void;
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page([video], {next_page_token: "next", next_page_signature: signature}))
+    .mockRejectedValueOnce(new TypeError("offline"))
+    .mockImplementationOnce(() => new Promise(r => {resolve = r;}));
+  await firstPage(fetchMock);
+  expect(screen.getByRole("meter")).toHaveAttribute("value", "19");
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  await screen.findByRole("alert");
+  expect(screen.getByRole("status")).toBeEmptyDOMElement();
+  expect(screen.queryByRole("meter")).not.toBeInTheDocument();
+  expect(screen.getByText(/Dernier solde connu : 19/)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  expect(screen.getByRole("status")).toHaveTextContent(/deuxième page/);
+  expect(screen.queryByRole("meter")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", {name: "Rechercher sur YouTube"})).toBeDisabled();
+  await act(async () => resolve(page([video], {page_number: 2, searches_remaining: 17})));
+  expect(screen.getByRole("meter")).toHaveAttribute("value", "17");
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+});
+
+it("restaure le focus du bouton disparu vers le résumé, puis permet de rejoindre le tri", async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page([video], {next_page_token: "next", next_page_signature: signature}))
+    .mockResolvedValueOnce(page([video], {page_number: 2}));
+  await firstPage(fetchMock);
+  const button = screen.getByRole("button", {name: nextLabel});
+  button.focus();
+  fireEvent.click(button);
+  const summary = await screen.findByText(/2 page\(s\) chargée/);
+  await waitFor(() => expect(summary).toHaveFocus());
+  expect(summary.compareDocumentPosition(screen.getByRole("combobox")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+it("ne reprend pas le focus si l’utilisateur rejoint le tri pendant la continuation", async () => {
+  let resolve!: (value: unknown) => void;
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(page([video], {next_page_token: "next", next_page_signature: signature}))
+    .mockImplementationOnce(() => new Promise(r => {resolve = r;}));
+  await firstPage(fetchMock);
+  const button = screen.getByRole("button", {name: nextLabel});
+  button.focus(); fireEvent.click(button);
+  const select = screen.getByRole("combobox");
+  select.focus();
+  await act(async () => resolve(page([video], {page_number: 2})));
+  expect(select).toHaveFocus();
 });
