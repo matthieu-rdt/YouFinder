@@ -84,3 +84,18 @@ L’analyse de `published_at` valide calendrier et fuseau, puis sépare secondes
 Le sélecteur natif est proche des cartes, hors du formulaire de recherche, et reste utilisable pendant une continuation. Les gestionnaires de recherche, pagination, fusion, déduplication et compteurs n’ont pas été modifiés. Le choix est conservé lors des nouvelles recherches et revient à la pertinence au remontage, sans persistance navigateur. Le tri concerne uniquement l’échantillon chargé, jamais une recherche exhaustive par date.
 
 Aucun changement backend, contrat API, paramètre YouTube, quota, service, dépendance ou configuration Compose. Détails dans [[youtube-api]], vérifications dans [[validation]] et plan/bilan dans [[codex-reports/phase-05]].
+
+
+# Décision phase 6 — présentation du dashboard et états de solde
+
+Date : 2026-11-05. Architecture validée par l’utilisateur ; implémentation sur `feat/ui-dashboard`, recette utilisateur restante.
+
+`SearchSummary` présente les compteurs cumulés déjà assemblés par `VideoSearch`, sans modifier leur calcul. `items.length` fournit seulement le nombre unique affiché. La barre retenues/écartées encode les compteurs de traitement ; les omissions restent distinctes. Aucun score, agrégat de statistiques YouTube ou nouveau champ API.
+
+`DailyAttempts` reçoit le plafond, le solde et des indicateurs de présentation. Un état `balanceStale` mémorise une erreur HTTP, réseau ou de réponse invalide ; une réponse valide le réinitialise. Une simple erreur de saisie ne rend pas le solde périmé. Le dernier nombre connu reste visible, sans jauge après erreur, y compris pendant une reprise. Valeurs nulles/incohérentes : état inconnu ; plafond nul : texte sans jauge. Aucun décompte local, timer, stockage ou rafraîchissement réseau.
+
+Le formulaire conserve ses validations, champs et conversions UTC. Les filtres restent dans un fieldset visible ; l’unique continuation est placée près du tri, avant la liste, conformément à l’ajustement validé. Les gardes de requête, critères instantanés, jetons, limite de deux pages, fusion, déduplication et fonction de tri restent identiques. Les seuls ajouts aux gestionnaires concernent l’état visuel de fraîcheur du solde.
+
+Les effets React ajoutés servent uniquement au focus : résumé de pagination après disparition du bouton si l’utilisateur y était resté ; annulation de cette restauration en cas de déplacement pendant l’attente. Aucune requête dans ces effets. Le statut de chargement concis et l’alerte d’erreur sont séparés des cartes, qui ne sont plus dans une région live globale. Styles de focus communs et contrôles natifs, sans dépendance UI supplémentaire.
+
+Décision lisible dans Obsidian ; preuves et limites dans [[validation]] et [[codex-reports/phase-06]]. Aucun backend, contrat API, module de tri, filtre métier, configuration Compose ou service modifié.

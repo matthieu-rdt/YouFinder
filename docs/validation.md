@@ -257,3 +257,121 @@ Aucune modification backend, Docker Compose, dépendance, volume ou secret ; auc
 La validation porte uniquement sur les 9 scénarios ci-dessus. Elle n’atteste pas de vérifications supplémentaires : utilisation au clavier, affichage mobile, absence d’appel réseau, absence de recherche automatique après rechargement, cas de dates invalides ou d’erreur de continuation, ni exécution des suites automatisées dans Compose. Les limites techniques déjà documentées restent applicables.
 
 Les mentions antérieures de recette à effectuer décrivent l’état avant ce retour utilisateur. Cette mise à jour concerne uniquement `docs/validation.md` et `docs/codex-reports/phase-05.md` : aucun code applicatif modifié, aucune nouvelle recherche YouTube ni vérification fonctionnelle exécutée par Codex, aucun commit Git, aucune intervention sur le VPS OVH ni aucun déploiement.
+
+## Phase 6 — dashboard UX/UI — 2026-11-05
+
+Branche : `feat/ui-dashboard`. Plan et décisions dans [le rapport unique de phase 6](codex-reports/phase-06.md). Les validations historiques restent distinctes de cette phase.
+
+### Tests automatisés et build réellement exécutés
+
+| Commande / contexte | Résultat observé |
+| --- | --- |
+| `npm test` dans `frontend/`, avant modification | **68 tests réussis dans 5 fichiers** |
+| `npm test` dans `frontend/`, version finale | **88 tests réussis dans 7 fichiers** |
+| `npm run typecheck` dans `.phase6-validation`, code et tests finaux copiés | **Réussi** |
+| `NEXT_TELEMETRY_DISABLED=1 npm run build` dans cette copie | **Échec Turbopack** : ouverture de port interdite, en sandbox puis après autorisation hors sandbox |
+| `NEXT_TELEMETRY_DISABLED=1 npm run build -- --webpack` dans cette copie, version finale | **Réussi** : compilation, TypeScript, génération de l’accueil et des pages légales |
+| `git diff --check` | **Réussi** |
+
+Node 24.22.2 ARM64 réinstallé dans `/tmp`, archive vérifiée avec le SHA-256 officiel. Dépendances existantes du projet conservées. Typecheck et build réalisés dans une copie isolée du frontend, de ses tests et de ses dépendances, liens internes préservés ; aucun cache `.next` du serveur existant remplacé. Cette copie de validation a ensuite été retirée.
+
+Les 68 tests existants restent inclus. Les assertions d’ordre et de nombre de vidéos ciblent désormais les titres h3 des cartes, après ajout des titres h2 de recherche et de résultats ; l’assertion des vues à zéro est limitée aux cartes plutôt qu’aux nouveaux indicateurs. Aucune garantie métier retirée.
+
+20 nouveaux tests : 11 pour le plafond (valeurs nulles/incohérentes, bornes, plafond nul, solde périmé/en attente), 4 pour les compteurs (cumuls/uniques, omissions, pages et répartitions aux limites), 5 pour les interactions (fieldset et aides, unique bouton avant les cartes, annonces séparées, erreur/reprise et jauge, restauration du focus et absence de vol de focus). Les tests existants couvrent toujours filtres, dates UTC, grands entiers, consentement, pagination, déduplication, trois tris, erreurs et absence d’appels automatiques. Réponses entièrement simulées.
+
+### Contrôles automatisés en navigateur réellement exécutés
+
+Playwright **1.65.0** et Chromium Headless Shell **158.0.8127.18** installés uniquement dans `/tmp` pour la vérification, sans ajout aux manifestes/lockfiles du projet. Bibliothèques nécessaires extraites dans `/tmp` depuis des archives Debian vérifiées par SHA-256, sans installation système. Lancement après autorisation hors sandbox.
+
+Le script temporaire `/tmp/youfinder-ui-tools/check-dashboard.cjs` charge le HTML et les assets du build Webpack par interception des requêtes sur un domaine fictif. Toutes les réponses de recherche sont simulées et les requêtes applicatives externes bloquées. Il ne vérifie ni le proxy réel ni Docker Compose. Le dernier passage sur le build final réussit, sans erreur JavaScript de page.
+
+- Accueil avant recherche et après 40 cartes simulées : aucune largeur excédentaire du document à **320, 375, 768 et 1440 px**.
+- Absence de requête de recherche supplémentaire au changement de tri ; un seul bouton de continuation avant les cartes.
+- Erreur de continuation : jauge masquée, dernier solde connu conservé. Reprise manuelle au clavier puis succès : 98 examinées, 70 retenues, 28 écartées, **55 uniques**, 2 omissions, 2 pages et solde 18/20. Ces chiffres sont des données de test, pas des données YouTube réelles.
+- Mode décroissant conservé après continuation ; retour à la pertinence avec première vidéo source restaurée.
+- Focus après disparition du bouton sur le résumé de pagination, contour visible ; Tab rejoint le tri.
+- Pages `/conditions` et `/confidentialite` : titre principal présent et absence de débordement horizontal à **320 et 1440 px**. Leur contenu n’a pas été modifié.
+- Captures du résumé à 375 et 1440 px examinées : groupes, valeurs, barre et textes distincts. Captures temporaires dans `/tmp/youfinder-dashboard-mobile.png` et `/tmp/youfinder-dashboard-desktop.png`.
+
+Contrastes calculés sur les couleurs de rendu échantillonnées (conversion canvas et luminance sRGB) : texte principal/fond **17,06:1**, aide/fond et footer/fond **12,01:1**, texte du champ/fond **13,97:1**, bouton actif blanc/rouge **6,47:1**, contour de focus du champ/fond du champ **8,77:1**. Ce contrôle ciblé n’est pas un audit exhaustif de tous les états et couleurs. Résultat brut temporaire : `/tmp/youfinder-ui-browser-results.json` ; le script n’est pas ajouté à la CI ni aux dépendances du projet.
+
+### Problèmes observés et limites
+
+Deux lancements de `npm test` depuis la racine ont échoué faute de `package.json` ; les exécutions consignées comme réussies ont eu lieu dans `frontend/`. Une première suite après refonte a eu 67 réussites et 1 échec : l’assertion globale de zéro rencontrait aussi un indicateur de traitement. Elle a été précisée pour viser les cartes vidéo. Les suites suivantes ont réussi, dont la version finale à 88 tests.
+
+L’installation réseau de l’outil navigateur et le téléchargement Chromium ont d’abord échoué sur la résolution DNS en sandbox puis réussi après autorisation. Le lancement a révélé des bibliothèques hôte manquantes puis une restriction de sandbox ; préparation isolée des bibliothèques et exécution autorisée nécessaires. Le premier script navigateur avait une attente de rendu trop courte et une assertion de focus trop large ; elles ont été corrigées. Le parcours réel a permis de corriger la restauration du focus lorsque le bouton devient désactivé puis disparaît. Les résultats ci-dessus concernent le dernier passage réussi.
+
+Pas de validation Turbopack dans cet environnement, pas de suite backend relancée pour cette modification frontend. Aucun test dans les conteneurs, proxy réel ou appel YouTube réel. Aucun changement de backend, contrat API, module de tri, filtres métier, manifeste, lockfile ou Compose ; aucun secret affiché, volume supprimé, commit, accès OVH ou déploiement.
+
+### Recette utilisateur restante au bilan initial — non validée à ce stade
+
+Les contrôles navigateur ci-dessus sont automatisés par Codex, pas une recette humaine déclarée réussie. Restent à vérifier : confort d’utilisation et lisibilité sur les appareils/navigateurs habituels (notamment Safari/macOS et mobile réel), parcours clavier complet, lecture effective des annonces avec lecteur d’écran, zoom 200 % et reflow à fort zoom, tous les contrastes/états non échantillonnés, cohérence visuelle des cartes avec miniatures et données réelles déjà disponibles, puis validation utilisateur des parcours de recherche, filtres, tri et pagination. Aucun nouvel appel YouTube n’est nécessaire à une recette avec réponses simulées.
+
+
+## Phase 6 — complément Turbopack dans Docker Compose, rapporté par l’utilisateur
+
+**Source : exécution manuelle rapportée par l’utilisateur sur sa VM Debian ARM64, dans son environnement Docker Compose.** Codex n’a pas exécuté cette commande ni vérifié directement sa sortie.
+
+Commande exécutée par l’utilisateur :
+
+```bash
+sudo docker compose run --rm --no-deps \
+  -v /app/.next \
+  frontend npm run build
+```
+
+Résultat rapporté : **build Next.js 16.4.3 avec Turbopack réussi**. Compilation de production en **1962 ms**, vérification TypeScript, collecte des données des pages, génération des **5 pages statiques** et optimisation finale réussies ; retour au terminal sans erreur visible.
+
+Ce résultat complète les vérifications Codex sans les remplacer : dans l’environnement Codex, Turbopack avait échoué sur l’ouverture d’un port local interdit, en sandbox puis après autorisation ; le build Webpack avait réussi. Cet échec historique est conservé. Le build Turbopack est désormais déclaré réussi dans l’environnement Docker Compose de l’utilisateur, distinct de l’environnement Codex.
+
+Cette validation porte sur le build frontend uniquement. Elle n’atteste ni d’une nouvelle exécution des suites de tests dans Docker, ni du fonctionnement du proxy ou du backend, ni d’une recette UX/accessibilité complète, ni d’une validation complète de l’application en production. La recette utilisateur fonctionnelle et les contrôles manuels restants de phase 6 ne sont pas clôturés par ce seul build.
+
+Pour cette mise à jour documentaire, Codex n’a relancé aucun test, build ou recherche YouTube, modifié aucun code applicatif, créé aucun commit Git, ni effectué de déploiement ou d’intervention OVH. Les modifications préexistantes du workspace sont préservées.
+
+
+## Clôture documentaire de la phase 6 — 2026-11-12
+
+**Statut : phase 6 acceptée pour clôture par l’utilisateur, avec les réserves ci-dessous.** La recette principale du dashboard UX/UI est terminée. Le plan initial, le bilan et les résultats précédents sont conservés comme historique ; leurs mentions de recette restante décrivent l’état avant cette clôture.
+
+### Validations techniques déjà confirmées par l’utilisateur
+
+| Vérification automatisée | Résultat confirmé | Environnement |
+| --- | --- | --- |
+| Tests frontend | **88 tests réussis** | Docker Compose |
+| Typecheck | **Réussi** | Docker Compose |
+| Build Next.js 16.4.3 avec Turbopack | **Réussi** | Conteneur temporaire Docker Compose |
+
+Ces confirmations complètent les résultats historiques, dont le complément Turbopack ci-dessus. Elles sont rapportées par l’utilisateur, sans nouvelle exécution ni vérification directe des sorties par Codex lors de cette clôture. Elles ne valent pas validation exhaustive de l’accessibilité ou de la production.
+
+### Recette principale — observations confirmées par l’utilisateur
+
+- Les cinq indicateurs affichent des valeurs cohérentes ; vidéos retenues et vidéos uniques sont correctement distinguées.
+- La barre retenues/écartées et la jauge du quota interne sont cohérentes.
+- Les dates et les filtres avancés fonctionnent.
+- Le bouton de pagination est visible avant les cartes ; la pagination est limitée à deux pages.
+- Les trois modes de tri fonctionnent et les cartes vidéo sont lisibles.
+- Le zoom navigateur à 200 % fonctionne.
+- Les pages Confidentialité et Conditions sont lisibles.
+- Aucune anomalie métier n’est signalée dans cette recette.
+
+Ces observations utilisateur sont distinctes des tests automatisés. Elles ne confirment pas les contrôles détaillés ci-dessous.
+
+### Réserves et contrôles restant à effectuer
+
+| Contrôle | État à la clôture |
+| --- | --- |
+| Responsive sur appareil mobile réel | **Non testé, non validé.** Les contrôles antérieurs sur des largeurs simulées ne remplacent pas ce contrôle. |
+| Navigation clavier générale | Fonctionnement rapporté comme utilisable ; cette observation ne valide pas le parcours détaillé. |
+| Recette clavier détaillée | **Restant à effectuer** : Tab, Maj+Tab, Entrée, Espace, visibilité et déplacement du focus, notamment lors de la disparition du bouton de pagination. Les tests antérieurs ne remplacent pas cette confirmation utilisateur. |
+
+Les contrôles antérieurement prévus mais non confirmés restent non validés, notamment l’écoute avec lecteur d’écran, le reflow à fort zoom et les contrastes/états non échantillonnés. Le zoom à 200 % confirmé ne vaut pas validation de tous ces contrôles.
+
+### Navigation vers les pages légales — comportement constaté et suite envisagée
+
+L’utilisateur observe que les résultats disparaissent lors du retour à l’accueil après consultation des pages légales. Ce comportement est consigné comme une limitation observée ; son origine et sa date d’introduction ne sont pas établies. Aucune preuve ne permet de l’attribuer à la phase 6 ou de le qualifier de régression confirmée.
+
+Prévoir dans une phase future une étude de conservation de l’état de recherche lors de cette navigation. Aucune correction n’est implémentée dans cette clôture. Les réserves ci-dessus ne sont pas présentées comme des régressions confirmées et n’empêchent pas la clôture acceptée par l’utilisateur.
+
+### Périmètre de cette clôture documentaire
+
+Seuls `docs/validation.md` et `docs/codex-reports/phase-06.md` sont mis à jour. Aucun test automatisé, build ou recherche YouTube n’est relancé pour cette tâche ; le contrôle documentaire `git diff --check` a réussi. Aucun code applicatif modifié, commit Git créé, déploiement effectué ou intervention OVH réalisée. Les modifications préexistantes du workspace sont préservées.

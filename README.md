@@ -61,6 +61,12 @@ Les dates absentes ou invalides restent en fin des deux tris chronologiques, dan
 
 Le plafond interne vaut **20 tentatives par jour**, partagé par toute l’application et configurable avec `YOUTUBE_DAILY_SEARCH_LIMIT` (entier positif ou nul ; zéro bloque les recherches). Chaque page demandée réserve une tentative. Chaque tentative réservée avant l’appel Google reste comptée, même si Google renvoie une erreur ou si la connexion échoue. Les entrées invalides et l’absence de clé ne consomment rien. Aucun retry automatique, aucune recherche à chaque frappe.
 
+Le dashboard sépare les cumuls de traitement (examinées, retenues, écartées) des vidéos uniques affichées après déduplication et des pages chargées. La barre retenues/écartées représente uniquement ces cumuls ; les vidéos indisponibles omises sont signalées à part. Aucun score analytique n’est créé.
+
+La jauge indique la capacité restante du plafond interne YouFinder, jamais le quota Google. Avant une réponse valide, le solde est inconnu ; après une erreur de requête, la jauge est masquée et le dernier solde connu reste indiqué, potentiellement périmé. Aucun rafraîchissement automatique. Un plafond nul n’affiche pas de jauge.
+
+Les filtres avancés restent visibles dans un groupe accessible. Le sélecteur de tri et l’unique bouton de continuation se trouvent avant les cartes, près du résumé de pagination. Les cartes et contrôles s’adaptent aux petits écrans ; les annonces de chargement sont séparées de la liste pour éviter sa relecture complète.
+
 Le compteur contient uniquement une date et un nombre, dans `backend/.state/search-quota.json`, protégé par verrou Linux et écriture atomique. Il survit aux rechargements et recréations des conteneurs grâce au montage existant `./backend:/app`, sans nouveau volume Docker. Il est ignoré par Git et exclu du contexte de build. En cas de corruption ou d’accès impossible, la recherche est bloquée. Ne pas supprimer ce dossier pour contourner le plafond. Ce mécanisme vise une installation locale unique sur système de fichiers local, pas plusieurs serveurs indépendants.
 
 Les quotas Google restent indépendants du plafond interne. Consulter leur allocation réelle dans la console Google Cloud. Voir [la documentation API et ses sources officielles](docs/youtube-api.md).
