@@ -2,11 +2,13 @@ import { VideoSearch } from "../components/video-search";
 
 export default function Home() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-10">
-      <p className="text-sm font-semibold uppercase tracking-widest text-red-400">Projet personnel</p>
-      <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">YouFinder</h1>
-      <p className="text-lg text-slate-300">Recherchez des vidéos avec les données publiques de YouTube.</p>
-      <p className="rounded border border-slate-700 p-4">Deux pages de 50 identifiants maximum, soit 100 au total, chargées manuellement, dans l’ordre initial renvoyé par YouTube. Un tri chronologique local est disponible sur les vidéos déjà chargées. Ces résultats ne représentent pas une analyse exhaustive de YouTube.</p>
+    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 px-4 py-4 sm:px-6 sm:py-6">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-3xl font-bold tracking-tight">YouFinder</h1>
+        <a href="https://www.youtube.com/" className="inline-block" aria-label="Développé avec YouTube">
+          <img src="/developed-with-youtube.png" alt="Developed with YouTube" width={233} height={82} />
+        </a>
+      </header>
       <VideoSearch />
       <footer className="flex flex-wrap gap-5 border-t border-slate-700 pt-5 text-sm text-slate-300">
         <a className="underline" href="https://www.youtube.com/">Données : YouTube</a>
