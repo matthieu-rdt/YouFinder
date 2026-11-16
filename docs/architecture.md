@@ -114,3 +114,18 @@ La validation HTML est conservée. Le formulaire intercepte `invalid` en capture
 Aucun état React d’ouverture, accordéon personnalisé, stockage navigateur, effet réseau ou nouvelle dépendance projet. Les champs non contrôlés conservent leurs valeurs sur la même page. La restauration éventuelle des champs par le navigateur ne constitue pas une persistance applicative des résultats ; le consentement reste contrôlé et requis. Backend, API, règles de filtres, tri, pagination, quota et Compose inchangés. La limitation de navigation légale observée en phase 6 n’est pas corrigée ici.
 
 Contrôles Chromium avec données simulées, mesures, limites d’environnement et recette restante : [[validation]] et [[codex-reports/phase-06.1]].
+
+
+# Décision phase 6.2 — synthèse statistique unique
+
+Date : 2026-11-16. Plan validé par l’utilisateur sur `feat/ui-compact-summary` ; implémentation réalisée, recette utilisateur en attente. Cette décision remplace la présentation en panneaux et jauge de phase 6, sans modifier ses règles de solde.
+
+`SearchSummary` constitue l’unique panneau statistique. Son `dl` affiche les trois valeurs déjà disponibles (examinées, retenues, uniques) et réutilise `DailyAttempts` comme quatrième cellule `dt`/`dd`. Les définitions sont reliées aux libellés par `aria-labelledby` et identifiants React `useId`. Deux colonnes sur mobile, quatre à partir de `sm` ; les nombres restent exacts et peuvent revenir à la ligne sans troncature.
+
+Les retenues restent les cumuls avant déduplication ; les uniques proviennent de la liste déjà dédupliquée dans `VideoSearch`. Les écartées par filtres sont indiquées une fois, accompagnées de la seule barre décorative retenues/écartées et de son texte. Les omissions indisponibles restent séparées et conditionnelles. Aucun compteur métier recalculé, ratio analytique ou score nouveau.
+
+`DailyAttempts` conserve les validations de solde/plafond et les qualifications de dernière réponse, dernier solde connu et péremption ; il ne possède plus de panneau ni de jauge. Les cas nul/inconnu et le plafond quotidien exact restent explicites. La synthèse porte l’aide commune sur le plafond interne, la journée Europe/Paris et l’absence d’actualisation automatique. Pas d’état, timer, stockage ni effet réseau nouveau.
+
+Le groupe pagination/tri perd seulement son enveloppe `.panel` et réduit ses espacements. Le nombre de pages réussies apparaît une fois dans `paginationSummary`, qui conserve ref, `tabIndex`, emplacement avant le tri et restauration conditionnelle du focus. Les handlers, effets et gardes de `VideoSearch` sont inchangés. Les liens légaux et la limitation historique de perte des résultats au retour restent inchangés.
+
+Mesures comparatives, tests et réserves : [[codex-reports/phase-06.2]] et [[validation]]. Aucun changement backend, API, filtre métier, quota, déduplication, tri ou Compose ; aucune dépendance ajoutée.
