@@ -1,19 +1,23 @@
+import { useId } from "react";
+
 export function DailyAttempts({ remaining, limit, stale = false, pending = false }: {
   remaining: number | null; limit: number | null; stale?: boolean; pending?: boolean;
 }) {
+  const id = useId();
   const known = remaining !== null && limit !== null && Number.isSafeInteger(remaining)
     && Number.isSafeInteger(limit) && remaining >= 0 && limit >= 0 && remaining <= limit;
   return (
-    <section aria-label="Plafond quotidien YouFinder" className="panel space-y-3">
-      <p className="font-semibold">Tentatives YouFinder restantes aujourd’hui</p>
-      <p className="text-sm text-slate-300">Plafond interne YouFinder, distinct du quota Google YouTube. Journée Europe/Paris.</p>
-      {known ? <>
-        <p className="font-semibold tabular-nums">{stale || pending ? "Dernier solde connu : " : "Solde de la dernière réponse : "}{remaining} tentative(s) restante(s) sur {limit} aujourd’hui (Europe/Paris).</p>
-        {stale ? <p className="text-sm text-amber-200">Le solde peut être périmé après une erreur. La jauge est masquée ; aucun rafraîchissement automatique.</p>
-          : limit > 0 ? <meter className="quota-meter block h-4 w-full" min={0} max={limit} value={remaining} aria-label="Tentatives YouFinder restantes" aria-valuetext={`${remaining} sur ${limit} — solde de la dernière réponse`} />
-          : <p className="text-sm text-slate-300">Plafond interne nul : aucune capacité disponible.</p>}
-      </> : <p className="text-sm text-slate-300">Solde inconnu. Il sera disponible après une réponse de recherche valide.</p>}
-      <p className="text-sm text-slate-300">Une page demandée consomme une tentative. Ce solde n’est pas actualisé en temps réel.</p>
-    </section>
+    <div className="min-w-0">
+      <dt id={id} className="text-sm text-slate-300">Tentatives YouFinder restantes</dt>
+      <dd aria-labelledby={id} className="mt-1 space-y-1">
+        {known ? <>
+          <span className="block text-2xl font-semibold tabular-nums [overflow-wrap:anywhere]">{remaining}</span>
+          <span className="block text-sm text-slate-300 [overflow-wrap:anywhere]">sur {limit} aujourd’hui</span>
+          <span className="block text-xs text-slate-300">{stale || pending ? "Dernier solde connu" : "Solde de la dernière réponse"}.</span>
+          {stale && <span className="block text-sm text-amber-200">Le solde peut être périmé après une erreur.</span>}
+          {limit === 0 && <span className="block text-sm text-slate-300">Plafond interne nul : aucune capacité disponible.</span>}
+        </> : <span className="block text-sm text-slate-300">Solde inconnu. Disponible après une réponse de recherche valide.</span>}
+      </dd>
+    </div>
   );
 }

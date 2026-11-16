@@ -21,6 +21,18 @@ function setup(fetchMock = vi.fn()) {
   return { ...view, fetchMock, form: view.container.querySelector("form")! };
 }
 
+function metric(label: string) {
+  return within(screen.getByText(label, {selector: "dt"}).parentElement!);
+}
+function expectCount(label: string, value: number) {
+  expect(metric(label).getByText(String(value), {exact: true})).toBeVisible();
+}
+function expectProcessing(examined: number, retained: number, filtered: number) {
+  expectCount("Vidéos examinées", examined);
+  expectCount("Vidéos retenues", retained);
+  expect(screen.getByText("Vidéos écartées").parentElement).toHaveTextContent(`: ${filtered} par les filtres`);
+}
+
 function accept() {
   fireEvent.click(screen.getByRole("checkbox"));
 }
@@ -58,7 +70,7 @@ describe("Recherche", () => {
     expect(screen.getAllByText("Indisponible")).toHaveLength(2);
     expect(screen.getAllByRole("article").map(card => within(card).getByText("0"))).toHaveLength(2);
     expect(screen.getAllByText("15:33")).toHaveLength(2);
-    expect(screen.getByText(/19 tentative/)).toBeVisible();
+    expectCount("Tentatives YouFinder restantes", 19);
     expect(screen.getByText(/ont été omises/)).toBeVisible();
     expect(screen.getAllByRole("link", { name: "Voir sur YouTube ↗" })[0]).toHaveAttribute("href", video.youtube_url);
   });
@@ -124,7 +136,8 @@ it("transmet les filtres combinés sans perte de précision et les conserve apr�
   const values = [["Vues minimum", "9007199254740993"], ["Abonnés maximum", "0"], ["Durée minimum (minutes)", "10"]];
   for (const [label, value] of values) fireEvent.change(screen.getByLabelText(label), {target: {value}});
   fireEvent.submit(form);
-  expect(await screen.findByText(/10 vidéo\(s\) examinée/)).toBeVisible();
+  await screen.findByRole("region", {name: "Synthèse des pages traitées"});
+  expectProcessing(10, 0, 10);
   expect(screen.getByText("Recherche non exhaustive.")).toBeVisible();
   const params = new URL(fetchMock.mock.calls[0][0], "http://test").searchParams;
   expect(params.get("min_views")).toBe("9007199254740993");
@@ -195,8 +208,8 @@ it("charge exactement deux pages manuelles, déduplique et cumule sans confondre
   fireEvent.change(screen.getByLabelText("Vues minimum"), {target: {value: "100"}});
   fireEvent.click(screen.getByRole("button", {name: nextLabel}));
   expect(await screen.findByText(/2 page\(s\) chargée/)).toBeVisible();
-  expect(screen.getByText(/3 vidéo\(s\) examinée\(s\), 3 retenue/)).toBeVisible();
-  expect(screen.getByText(/2 vidéo\(s\) unique/)).toBeVisible();
+  expectProcessing(3, 3, 0);
+  expectCount("Vidéos uniques affichées", 2);
   expect(screen.getAllByRole("heading", { level: 3 }).map(node => node.textContent)).toEqual(["Titre simulé", "Deuxième"]);
   const params = new URL(fetchMock.mock.calls[1][0], "http://test").searchParams;
   expect(params.get("page_token")).toBe("opaque+/= token");
@@ -214,7 +227,7 @@ it("charge exactement deux pages manuelles, déduplique et cumule sans confondre
   expect(fresh.get("q")).toBe("new criteria");
   expect(fresh.get("min_views")).toBe("100");
   expect(fresh.has("page_token")).toBe(false);
-  expect(screen.getByText(/4 vidéo\(s\) examinée/)).toBeVisible();
+  expectProcessing(4, 0, 4);
   expect(screen.queryByRole("heading", {name: "Titre simulé"})).not.toBeInTheDocument();
 });
 
@@ -224,8 +237,9 @@ it("continue après une page entièrement filtrée puis termine sans jeton", asy
     .mockResolvedValueOnce(page([], {page_number: 2, examined_count: 50, filtered_out_count: 50, searches_remaining: 18}));
   await firstPage(fetchMock);
   fireEvent.click(screen.getByRole("button", {name: nextLabel}));
-  expect(await screen.findByText(/100 vidéo\(s\) examinée\(s\), 0 retenue\(s\), 100 écartée/)).toBeVisible();
-  expect(screen.getByText(/0 vidéo\(s\) unique/)).toBeVisible();
+  await screen.findByText(/2 page\(s\) chargée/);
+  expectProcessing(100, 0, 100);
+  expectCount("Vidéos uniques affichées", 0);
   expect(screen.queryByRole("button", {name: nextLabel})).not.toBeInTheDocument();
 });
 
@@ -331,7 +345,7 @@ it("affiche 100 vidéos au maximum en conservant l’ordre de deux pages de 50",
   fireEvent.click(screen.getByRole("button", {name: nextLabel}));
   await screen.findByText(/2 page\(s\) chargée/);
   expect(screen.getAllByRole("heading", { level: 3 }).map(node => node.textContent)).toEqual(Array.from({length: 100}, (_, index) => `Vidéo ${index}`));
-  expect(screen.getByText(/100 vidéo\(s\) unique/)).toBeVisible();
+  expectCount("Vidéos uniques affichées", 100);
   expect(screen.queryByRole("button", {name: nextLabel})).not.toBeInTheDocument();
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
@@ -352,14 +366,14 @@ it("trie localement les trois modes sans appel, soumission ou changement de comp
   expect(select.closest("form")).toBeNull();
   expect(select).toHaveAccessibleDescription(/Tri local des vidéos déjà chargées/);
   expect(screen.getByText(/pas une recherche exhaustive par date/)).toBeVisible();
-  const counts = screen.getByText(/Compteurs cumulés/).textContent;
+  const counts = screen.getByRole("region", {name: "Synthèse des pages traitées"}).textContent;
   for (const [mode, expected] of [["date-desc", ["new", "middle", "old"]], ["date-asc", ["old", "middle", "new"]], ["relevance", ["middle", "old", "new"]]] as const) {
     chooseSort(mode);
     expect(titles()).toEqual(expected);
-    expect(screen.getByText(/Compteurs cumulés/).textContent).toBe(counts);
-    expect(screen.getByText(/3 vidéo\(s\) unique/)).toBeVisible();
+    expect(screen.getByRole("region", {name: "Synthèse des pages traitées"}).textContent).toBe(counts);
+    expectCount("Vidéos uniques affichées", 3);
     expect(screen.getByText(/1 vidéo\(s\) devenue/)).toBeVisible();
-    expect(screen.getByText(/19 tentative/)).toBeVisible();
+    expectCount("Tentatives YouFinder restantes", 19);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   }
   expect(new URL(fetchMock.mock.calls[0][0], "http://test").searchParams.toString()).toBe("q=python");
@@ -383,9 +397,9 @@ it.each([
   await screen.findByText(/2 page\(s\) chargée/);
   expect(screen.getByRole("combobox", {name: sortLabel})).toHaveValue(mode);
   expect(titles()).toEqual(expected);
-  expect(screen.getByText(/7 vidéo\(s\) examinée\(s\), 7 retenue/)).toBeVisible();
-  expect(screen.getByText(/6 vidéo\(s\) unique/)).toBeVisible();
-  expect(screen.getByText(/18 tentative/)).toBeVisible();
+  expectProcessing(7, 7, 0);
+  expectCount("Vidéos uniques affichées", 6);
+  expectCount("Tentatives YouFinder restantes", 18);
   expect(screen.queryByRole("button", {name: nextLabel})).not.toBeInTheDocument();
   chooseSort("relevance");
   expect(titles()).toEqual(["equal-first", "missing", "old", "new", "equal-second", "invalid"]);
@@ -424,7 +438,7 @@ it.each(["network", "quota"])("préserve le tri après erreur de continuation : 
   expect(screen.getByRole("combobox", {name: sortLabel})).toHaveValue("date-desc");
   chooseSort("date-asc");
   expect(titles()).toEqual(["old", "new"]);
-  expect(screen.getByText(/2 vidéo\(s\) examinée/)).toBeVisible();
+  expectProcessing(2, 2, 0);
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
@@ -439,7 +453,7 @@ it("conserve le mode après une nouvelle recherche et repart en pertinence au re
   expect(titles()).toEqual(["new", "old"]);
   expect(screen.getByRole("combobox", {name: sortLabel})).toHaveValue("date-desc");
   expect(screen.getByText(/1 page\(s\) chargée/)).toBeVisible();
-  expect(screen.getByText(/2 vidéo\(s\) examinée/)).toBeVisible();
+  expectProcessing(2, 2, 0);
   expect(new URL(fetchMock.mock.calls[1][0], "http://test").searchParams.toString()).toBe("q=typescript");
   unmount();
   const fresh = render(<VideoSearch />);
@@ -463,7 +477,7 @@ it("conserve le mode sur une page entièrement filtrée et trie la seconde", asy
   fireEvent.click(screen.getByRole("button", {name: nextLabel}));
   await screen.findByText(/2 page\(s\) chargée/);
   expect(titles()).toEqual(["new", "old"]);
-  expect(screen.getByText(/52 vidéo\(s\) examinée\(s\), 2 retenue\(s\), 50 écartée/)).toBeVisible();
+  expectProcessing(52, 2, 50);
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
@@ -490,25 +504,30 @@ it("garde un seul bouton de continuation avant les cartes et des annonces sépar
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
-it("masque le solde périmé après erreur et pendant la reprise, puis restaure la jauge sur succès", async () => {
+it("qualifie le solde après erreur et pendant la reprise, puis l’actualise sur succès", async () => {
   let resolve!: (value: unknown) => void;
   const fetchMock = vi.fn()
     .mockResolvedValueOnce(page([video], {next_page_token: "next", next_page_signature: signature}))
     .mockRejectedValueOnce(new TypeError("offline"))
     .mockImplementationOnce(() => new Promise(r => {resolve = r;}));
   await firstPage(fetchMock);
-  expect(screen.getByRole("meter")).toHaveAttribute("value", "19");
+  expectCount("Tentatives YouFinder restantes", 19);
+  expect(metric("Tentatives YouFinder restantes").getByText(/Solde de la dernière réponse/)).toBeVisible();
   fireEvent.click(screen.getByRole("button", {name: nextLabel}));
   await screen.findByRole("alert");
   expect(screen.getByRole("status")).toBeEmptyDOMElement();
   expect(screen.queryByRole("meter")).not.toBeInTheDocument();
-  expect(screen.getByText(/Dernier solde connu : 19/)).toBeVisible();
+  expectCount("Tentatives YouFinder restantes", 19);
+  expect(metric("Tentatives YouFinder restantes").getByText(/Dernier solde connu/)).toBeVisible();
+  expect(metric("Tentatives YouFinder restantes").getByText(/périmé/)).toBeVisible();
   fireEvent.click(screen.getByRole("button", {name: nextLabel}));
   expect(screen.getByRole("status")).toHaveTextContent(/deuxième page/);
   expect(screen.queryByRole("meter")).not.toBeInTheDocument();
   expect(screen.getByRole("button", {name: "Rechercher sur YouTube"})).toBeDisabled();
   await act(async () => resolve(page([video], {page_number: 2, searches_remaining: 17})));
-  expect(screen.getByRole("meter")).toHaveAttribute("value", "17");
+  expectCount("Tentatives YouFinder restantes", 17);
+  expect(metric("Tentatives YouFinder restantes").getByText(/Solde de la dernière réponse/)).toBeVisible();
+  expect(metric("Tentatives YouFinder restantes").queryByText(/périmé/)).not.toBeInTheDocument();
   expect(fetchMock).toHaveBeenCalledTimes(3);
 });
 
@@ -631,7 +650,9 @@ it("rouvre les dates inversées repliées sans effacer les résultats ni périme
   expect(filtersPanel().open).toBe(true);
   expect(screen.getByLabelText("Publié jusqu’au (UTC, jour inclus)")).toHaveFocus();
   expect(screen.getByRole("article")).toBeVisible();
-  expect(screen.getByRole("meter")).toBeVisible();
+  expectCount("Tentatives YouFinder restantes", 19);
+  expect(metric("Tentatives YouFinder restantes").getByText(/Solde de la dernière réponse/)).toBeVisible();
+  expect(metric("Tentatives YouFinder restantes").queryByText(/périmé/)).not.toBeInTheDocument();
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
@@ -683,4 +704,58 @@ it("focalise un mot-clé invalide sans ouvrir les filtres", () => {
   expect(screen.getByRole("textbox")).toHaveFocus();
   expect(filtersPanel().open).toBe(false);
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("présente un seul panneau statistique, quatre indicateurs et un unique repère de pages", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(page([video], {next_page_token: "next", next_page_signature: signature}));
+  const {container} = await firstPage(fetchMock);
+  const summary = screen.getByRole("region", {name: "Synthèse des pages traitées"});
+  expect(within(summary).getAllByRole("definition")).toHaveLength(4);
+  expect(within(summary).getByRole("definition", {name: "Tentatives YouFinder restantes"})).toHaveTextContent("19");
+  expect(screen.getAllByText(/1 page\(s\) chargée/)).toHaveLength(1);
+  expect(screen.queryByText(/Page 1 : chargée/)).not.toBeInTheDocument();
+  expect(container.querySelector('[aria-label="Organisation et pagination des résultats"]')).not.toHaveClass("panel");
+  expect(summary.querySelectorAll('[aria-hidden="true"]')).toHaveLength(1);
+  expect(screen.queryByRole("meter")).not.toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it("conserve le solde inconnu après une erreur initiale sans inventer de KPI", async () => {
+  const fetchMock = vi.fn().mockRejectedValue(new TypeError("offline"));
+  const {form} = setup(fetchMock);
+  expect(screen.getByText(/Solde interne inconnu/)).toBeVisible();
+  expect(screen.queryByRole("definition", {name: "Tentatives YouFinder restantes"})).not.toBeInTheDocument();
+  expect(fetchMock).not.toHaveBeenCalled();
+  accept(); fireEvent.submit(form);
+  await screen.findByRole("alert");
+  expect(screen.getByText(/Solde interne inconnu/)).toBeVisible();
+  expect(screen.queryByRole("region", {name: "Synthèse des pages traitées"})).not.toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it("affiche un plafond nul et un solde nul exacts sans autoriser de continuation", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(page([], {daily_limit: 0, searches_remaining: 0, next_page_token: "next", next_page_signature: signature}));
+  await firstPage(fetchMock);
+  expectCount("Tentatives YouFinder restantes", 0);
+  expect(metric("Tentatives YouFinder restantes").getByText("sur 0 aujourd’hui")).toBeVisible();
+  expect(screen.getByText(/Plafond interne nul/)).toBeVisible();
+  expectProcessing(0, 0, 0);
+  expect(screen.getByRole("button", {name: nextLabel})).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it("qualifie le solde pendant une continuation sans erreur et ne le décrémente pas localement", async () => {
+  let resolve!: (value: unknown) => void;
+  const fetchMock = vi.fn().mockResolvedValueOnce(page([video], {next_page_token: "next", next_page_signature: signature}))
+    .mockImplementationOnce(() => new Promise(r => {resolve = r;}));
+  await firstPage(fetchMock);
+  fireEvent.click(screen.getByRole("button", {name: nextLabel}));
+  expectCount("Tentatives YouFinder restantes", 19);
+  expect(metric("Tentatives YouFinder restantes").getByText(/Dernier solde connu/)).toBeVisible();
+  expect(metric("Tentatives YouFinder restantes").queryByText(/périmé/)).not.toBeInTheDocument();
+  await act(async () => resolve(page([], {page_number: 2, searches_remaining: 18})));
+  expectCount("Tentatives YouFinder restantes", 18);
+  expect(metric("Tentatives YouFinder restantes").getByText(/Solde de la dernière réponse/)).toBeVisible();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
 });

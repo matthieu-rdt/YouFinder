@@ -477,3 +477,40 @@ La disparition des résultats au retour des pages légales reste une limitation 
 ### Périmètre de la clôture
 
 Seuls `docs/validation.md` et `docs/codex-reports/phase-06.1.md` sont mis à jour pour cette clôture. Aucun code applicatif modifié, commit créé, volume supprimé, déploiement ou intervention OVH effectué. Les modifications préexistantes du workspace sont préservées.
+
+## Phase 6.2 — synthèse compacte, 16 novembre 2026
+
+Plan et implémentation autorisés sur `feat/ui-compact-summary`. **Implémentation et vérifications Codex réalisées ; recette utilisateur en attente.** Détail, commandes, incidents et mesures : [[codex-reports/phase-06.2]].
+
+- Avant modification : **97 tests frontend réussis dans 7 fichiers** et quatre mesures navigateur de référence effectuées avant de modifier les composants.
+- Version finale : **110 tests frontend réussis dans 7 fichiers**, `npm run typecheck` réussi et `NEXT_TELEMETRY_DISABLED=1 npm run build` **Turbopack réussi**, code 0 après relance. Node 24.22.2 temporaire vérifié par SHA-256 ; types/builds dans une copie isolée des sources et dépendances existantes. Aucun cache de service actif modifié.
+- Le premier build de chaque copie, après compilation et génération réussies, a terminé avec `SecurityFatalError: Your version of Next.js is affected by a known security vulnerability.` La relance identique termine avec code 0 et rappel de sécurité. Cet avertissement n’a pas été expertisé ni corrigé dans cette phase sans changement de dépendance.
+- Mesures avec Playwright 1.65.0 et Chromium Headless Shell 158.0.8127.18, mêmes fixtures/zoom/viewports et builds Turbopack. HTML/assets interceptés depuis les builds, recherches intégralement simulées, autres destinations externes bloquées : aucun backend ou proxy réel testé.
+
+| Scénario | Viewport CSS | Hauteur statistiques avant → après | Y documentaire première carte avant → après |
+| --- | --- | --- | --- |
+| Une page avec continuation | 375 × 900 | 1347 → 526 px | 2940,203125 → 2005,203125 px |
+| Deux pages avec doublon | 375 × 900 | 1301 → 526 px | 2730,203125 → 1849,203125 px |
+| Une page avec continuation | 1440 × 900 | 771 → 314 px | 1916,203125 → 1377,203125 px |
+| Deux pages avec doublon | 1440 × 900 | 771 → 314 px | 1816,203125 → 1285,203125 px |
+
+Dans chaque comparaison : trois panneaux de premier niveau avant les cartes deviennent un panneau statistique unique ; un panneau intersecte le viewport initial avant comme après. Aucun débordement horizontal. Deux colonnes à 375 px, quatre à 1440 px. Le formulaire et les cartes vidéo ne sont pas comptés dans ces panneaux.
+
+**Recette Chromium : 22 cas réussis.** Erreur réseau puis reprise différée, dernier solde connu et péremption puis actualisation sur réponse valide, critères soumis préservés, doublons et tri local, focus restauré ou conservé pendant l’attente, zéro examiné, tout filtré, omissions, solde nul, plafond nul, grand entier sûr, erreur quotidienne bloquante, erreur initiale/solde inconnu, consentement et onglets légaux. Deux contrôles complémentaires de reflow à 320 et 768 px. Aucun appel échappant aux mocks, aucune destination inattendue ni erreur JavaScript de page au passage final. Captures et JSON locaux dans `frontend/node_modules/.cache/phase62-evidence/` (ignorés par Git).
+
+Incidents de préparation documentés dans le rapport : copie des liens `.bin`, build depuis `node_modules` invalide, `/tmp` saturé lors d’un déplacement puis copie récupérée sur la partition du workspace ; restriction DNS npm et lancement Chromium nécessitant autorisation ; sélecteurs de tests `term`/`definition` adaptés. Aucun changement de configuration projet pour contourner ces problèmes. Les essais de builds initiaux en échec restent distincts des builds Turbopack finaux réussis.
+
+**Restent à vérifier par l’utilisateur :** confort et recette métier dans Compose, tests/types/build dans cet environnement, mobile physique, Safari, zoom natif 200 %, clavier complet et lecteur d’écran. Pas de validation bfcache ou de mesure systématique des contrastes. La perte d’état historique au retour des pages légales reste hors périmètre. L’avertissement de sécurité Next.js reste à examiner séparément. Aucun appel réel YouTube, changement backend/API/quota/tri/filtres/jetons/Compose, dépendance ajoutée, commit, volume supprimé, accès OVH ou déploiement.
+
+
+### Clôture documentaire de la phase 6.2 — 16 novembre 2026
+
+**Recette utilisateur terminée ; phase 6.2 clôturée avec réserves.** L’utilisateur confirme le fonctionnement du panneau compact, des quatre indicateurs, de la pagination et du tri. Les mentions de recette en attente ci-dessus décrivent le bilan avant cette confirmation. Plan, mesures et bilan conservés dans [[codex-reports/phase-06.2]].
+
+- **Preuves Codex historiques :** 97 tests frontend avant modification, 110 tests finaux dans 7 fichiers, typecheck et build Turbopack réussis après relance, quatre comparaisons UX et 22 cas Chromium simulés. Aucun de ces contrôles n’a été relancé pour la clôture.
+- **Confirmation utilisateur :** recette fonctionnelle terminée pour le panneau, les quatre indicateurs, la pagination et le tri. Aucun environnement ou scénario détaillé supplémentaire n’est déduit de ce retour.
+- **Docker / Compose :** aucun test automatisé, typecheck ou build Docker de phase 6.2 explicitement confirmé par l’utilisateur. Le build Docker confirmé en phase 6.1 ne vaut pas validation de la phase 6.2.
+- **Sécurité Next.js : problème ouvert.** L’avertissement du build et le rappel après relance sont conservés ; aucune expertise, correction ou mise à jour de dépendance effectuée. La réussite du build et de la recette ne lève pas ce problème.
+- **Réserves maintenues :** mobile physique, Safari, lecteur d’écran, zoom natif 200 %, bfcache, clavier exhaustif et contrastes systématiques non validés. Pas de confirmation spécifique nouvelle du serveur/proxy/backend réels ni des cas limites de solde, erreurs, plafond nul et omissions ; les preuves Codex et leurs limites restent inchangées. La perte d’état au retour des pages légales reste hors périmètre.
+
+Cette clôture modifie uniquement les deux documents de phase et de validation ; les autres changements préexistants sont préservés. Aucun code applicatif modifié, test ou appel YouTube relancé, commit créé, volume supprimé, accès ou déploiement OVH effectué.

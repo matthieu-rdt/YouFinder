@@ -5,7 +5,6 @@ import { isSearchResponse, nextUtcDayStart, type SearchResponse } from "../lib/y
 import { sortVideos, type VideoSortMode } from "../lib/video-sort";
 import { VideoCard } from "./video-card";
 import { SearchSummary } from "./search-summary";
-import { DailyAttempts } from "./daily-attempts";
 
 export function VideoSearch() {
   const formRef = useRef<HTMLFormElement>(null);
@@ -223,9 +222,8 @@ export function VideoSearch() {
         {error && <p id="search-error" role="alert" className="rounded-xl border border-red-400 bg-slate-900 p-4">{error}</p>}
         {!result && !loading && <p className="text-sm text-slate-300">Solde interne inconnu avant une réponse valide, distinct du quota Google YouTube. Journée Europe/Paris.</p>}
         {result && <>
-          <SearchSummary result={result} uniqueCount={result.items.length} pages={pages} />
-          <DailyAttempts remaining={result.searches_remaining} limit={result.daily_limit} stale={balanceStale} pending={loading} />
-          <div className="panel space-y-4" aria-label="Organisation et pagination des résultats">
+          <SearchSummary result={result} uniqueCount={result.items.length} stale={balanceStale} pending={loading} />
+          <div className="space-y-3" aria-label="Organisation et pagination des résultats">
             <h2 className="text-xl font-semibold">Résultats des pages chargées</h2>
             <p className="text-sm text-slate-300">{result.notice}</p>
             <p ref={paginationSummary} tabIndex={-1} className="rounded focus:outline-2 focus:outline-sky-300">{pages} page(s) chargée(s) sur 2 maximum — 50 identifiants par page maximum.</p>
