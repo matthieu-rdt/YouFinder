@@ -122,6 +122,9 @@ Le proxy utilise par défaut `http://127.0.0.1:8000`. `BACKEND_INTERNAL_URL` cha
 - `frontend/src/lib/video-sort.ts` : tri local pur et stable des publications enrichies.
 - `frontend/src/app/confidentialite/` et `conditions/` : informations utilisateur.
 - `docs/architecture.md`, `docs/youtube-api.md`, `docs/incidents.md` : documentation ouvrable dans Obsidian.
-- `docs/versions.json` : versions et digests vérifiés lors de la phase initiale, inchangés ici.
+- `docs/versions.json` : versions et digests initiaux ; correctif Next.js 16.4.5 documenté dans [SEC-01](docs/codex-reports/security-nextjs-2026-11.md), sans changement des images Docker.
 
-Aucune dépendance ajoutée. `package-lock.json` et `requirements.lock` restent inchangés. Aucun service OVH, Ansible ou PostgreSQL n’est modifié. La configuration actuelle reste destinée au développement local ; toute ouverture à d’autres utilisateurs ou mise en production demande une phase et une validation distinctes.
+Aucune dépendance fonctionnelle ajoutée. SEC-01 actualise Next.js et les seules entrées associées de `package-lock.json` ; `requirements.lock` reste inchangé. Aucun service OVH, Ansible ou PostgreSQL n’est modifié. La configuration actuelle reste destinée au développement local ; toute ouverture à d’autres utilisateurs ou mise en production demande une phase et une validation distinctes.
+
+
+Le correctif SEC-01 est vérifié dans une installation isolée. Une installation déjà en cours conserve sa version jusqu’à son actualisation autorisée ; vérifier `npm ls next @next/env react react-dom` dans l’environnement habituel après cette opération. Les contrôles et réserves, dont le build Turbopack bloqué dans Codex, sont détaillés dans le rapport SEC-01. Aucun redémarrage de service ni remplacement des dépendances actives n’est effectué automatiquement.
