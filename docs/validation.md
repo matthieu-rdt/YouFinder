@@ -545,3 +545,11 @@ Revue indépendante du diff effectuée ; README corrigé sur le verrou et la ver
 - **Portée et réserves :** réserve d’actualisation de Docker Compose levée selon la confirmation de version, sans déduire une mise à jour des installations hôte ou autres. Recette fonctionnelle SEC-01, mobile réel, Safari, lecteur d’écran, zoom natif et autres plateformes natives non confirmés davantage. Pas d’audit OVH/production ni de preuve d’absence générale de vulnérabilité. Les résultats Codex simulés et la recette de phase 6.2 restent distincts de cette confirmation.
 
 Seuls les deux documents sont complétés ; modifications préexistantes préservées. Aucun code applicatif, test ou dépendance modifié, contrôle applicatif ou appel YouTube relancé, commit créé, volume supprimé, accès ou déploiement OVH effectué. Aucune autorisation de commit ou de déploiement déduite de cette clôture.
+
+## Phase 6.3 — tableau des résultats
+
+Suite frontend complète en environnement isolé Next.js 16.4.5 : 112 tests dans 7 fichiers, typecheck et build Turbopack réussis. La recette Chromium a utilisé deux builds Webpack de production, des réponses et des images simulées. À 1440 × 900, six vidéos sont visibles en entier dans la fenêtre alignée sur le tableau, contre deux avec la grille de cartes. À 375 × 900, le comptage passe d’une à cinq. Les cas à 320, 375, 768 et 1440 px et à 200 % de zoom natif passent sans débordement horizontal global.
+
+Chromium expose le tableau et ses cinq en-têtes aux largeurs testées. Le parcours clavier et la restauration du focus après continuation ont été contrôlés. La recette utilisateur sur appareil réel et la lecture avec Safari et un lecteur d’écran restent à réaliser. Le protocole, les mesures brutes et les incidents de build sont consignés dans le [rapport de phase 6.3](codex-reports/phase-06.3.md).
+
+Après la première recette visuelle de phase 6.3, les en-têtes ont été raccourcis et une numérotation a été ajoutée dans la cellule vidéo. Les 112 tests frontend, le typecheck et le build Turbopack ont été rejoués avec succès. La recette Chromium simulée a confirmé les positions après tri et continuation, la navigation clavier et l’absence de débordement aux quatre largeurs et au zoom natif à 200 %. La [recette utilisateur des ajustements](codex-reports/phase-06.3.md#ajustements-ux-après-recette-utilisateur) reste à réaliser.

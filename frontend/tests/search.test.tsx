@@ -68,11 +68,11 @@ describe("Recherche", () => {
     expect(fetchMock.mock.calls[0][1]).toEqual({ cache: "no-store" });
     expect(screen.getAllByRole("heading", { level: 3 }).map(node => node.textContent)).toEqual(["Titre simulé", "Deuxième résultat"]);
     expect(screen.getAllByText("Indisponible")).toHaveLength(2);
-    expect(screen.getAllByRole("article").map(card => within(card).getByText("0"))).toHaveLength(2);
+    expect(screen.getAllByRole("row").slice(1).map(row => within(row).getByRole("cell", { name: "0" }))).toHaveLength(2);
     expect(screen.getAllByText("15:33")).toHaveLength(2);
     expectCount("Tentatives YouFinder restantes", 19);
     expect(screen.getByText(/ont été omises/)).toBeVisible();
-    expect(screen.getAllByRole("link", { name: "Voir sur YouTube ↗" })[0]).toHaveAttribute("href", video.youtube_url);
+    expect(screen.getByRole("link", { name: "Titre simulé" })).toHaveAttribute("href", video.youtube_url);
   });
 
   it("affiche les résultats vides", async () => {
@@ -334,16 +334,25 @@ it.each([
   expect(screen.getByText(/1 page\(s\) chargée/)).toBeVisible();
 });
 
+function expectResultPositions(count: number) {
+  const rows = screen.getAllByRole("row").slice(1);
+  expect(rows).toHaveLength(count);
+  expect(rows.map(row => row.querySelector(".video-results-position")?.textContent))
+    .toEqual(Array.from({length: count}, (_, index) => String(index + 1)));
+}
+
 it("affiche 100 vidéos au maximum en conservant l’ordre de deux pages de 50", async () => {
   const makeVideos = (start: number) => Array.from({length: 50}, (_, index) => ({...video, id: String(start + index), title: `Vidéo ${start + index}`}));
   const fetchMock = vi.fn()
     .mockResolvedValueOnce(page(makeVideos(0), {next_page_token: "next", next_page_signature: signature}))
     .mockResolvedValueOnce(page(makeVideos(50), {page_number: 2, searches_remaining: 18}));
   await firstPage(fetchMock);
+  expectResultPositions(50);
   expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(50);
   expect(fetchMock).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", {name: nextLabel}));
   await screen.findByText(/2 page\(s\) chargée/);
+  expectResultPositions(100);
   expect(screen.getAllByRole("heading", { level: 3 }).map(node => node.textContent)).toEqual(Array.from({length: 100}, (_, index) => `Vidéo ${index}`));
   expectCount("Vidéos uniques affichées", 100);
   expect(screen.queryByRole("button", {name: nextLabel})).not.toBeInTheDocument();
@@ -370,6 +379,7 @@ it("trie localement les trois modes sans appel, soumission ou changement de comp
   for (const [mode, expected] of [["date-desc", ["new", "middle", "old"]], ["date-asc", ["old", "middle", "new"]], ["relevance", ["middle", "old", "new"]]] as const) {
     chooseSort(mode);
     expect(titles()).toEqual(expected);
+    expectResultPositions(3);
     expect(screen.getByRole("region", {name: "Synthèse des pages traitées"}).textContent).toBe(counts);
     expectCount("Vidéos uniques affichées", 3);
     expect(screen.getByText(/1 vidéo\(s\) devenue/)).toBeVisible();
@@ -397,12 +407,14 @@ it.each([
   await screen.findByText(/2 page\(s\) chargée/);
   expect(screen.getByRole("combobox", {name: sortLabel})).toHaveValue(mode);
   expect(titles()).toEqual(expected);
+  expectResultPositions(6);
   expectProcessing(7, 7, 0);
   expectCount("Vidéos uniques affichées", 6);
   expectCount("Tentatives YouFinder restantes", 18);
   expect(screen.queryByRole("button", {name: nextLabel})).not.toBeInTheDocument();
   chooseSort("relevance");
   expect(titles()).toEqual(["equal-first", "missing", "old", "new", "equal-second", "invalid"]);
+  expectResultPositions(6);
   expect(fetchMock).toHaveBeenCalledTimes(2);
   const params = new URL(fetchMock.mock.calls[1][0], "http://test").searchParams;
   expect([...params.keys()]).toEqual(["q", "page_token", "page_signature"]);
@@ -492,15 +504,16 @@ it("regroupe les filtres et associe les aides sans appel automatique", () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it("garde un seul bouton de continuation avant les cartes et des annonces séparées", async () => {
+it("garde un seul bouton de continuation avant le tableau et des annonces séparées", async () => {
   const fetchMock = vi.fn().mockResolvedValue(page([video], {next_page_token: "next", next_page_signature: signature}));
   await firstPage(fetchMock);
   const buttons = screen.getAllByRole("button", {name: nextLabel});
+  const table = screen.getByRole("table", {name: "Résultats des pages chargées"});
   expect(buttons).toHaveLength(1);
-  expect(buttons[0].compareDocumentPosition(screen.getByRole("article")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.getByRole("combobox", {name: sortLabel}).compareDocumentPosition(screen.getByRole("article")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.getByRole("article").closest('[aria-live]')).toBeNull();
-  expect(screen.getByRole("status")).not.toContainElement(screen.getByRole("article"));
+  expect(buttons[0].compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getByRole("combobox", {name: sortLabel}).compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(table.closest('[aria-live]')).toBeNull();
+  expect(screen.getByRole("status")).not.toContainElement(table);
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
@@ -649,7 +662,7 @@ it("rouvre les dates inversées repliées sans effacer les résultats ni périme
   fireEvent.submit(form);
   expect(filtersPanel().open).toBe(true);
   expect(screen.getByLabelText("Publié jusqu’au (UTC, jour inclus)")).toHaveFocus();
-  expect(screen.getByRole("article")).toBeVisible();
+  expect(screen.getByRole("row", {name: /Titre simulé/})).toBeVisible();
   expectCount("Tentatives YouFinder restantes", 19);
   expect(metric("Tentatives YouFinder restantes").getByText(/Solde de la dernière réponse/)).toBeVisible();
   expect(metric("Tentatives YouFinder restantes").queryByText(/périmé/)).not.toBeInTheDocument();
@@ -672,14 +685,14 @@ it("conserve l’instantané soumis pour la deuxième page après modification d
   accept();
   fireEvent.change(screen.getByLabelText("Vues minimum"), {target: {value: "0"}});
   fireEvent.submit(form);
-  await screen.findByRole("article");
+  await screen.findByRole("row", {name: /Titre simulé/});
   toggleFilters();
   fireEvent.change(screen.getByLabelText("Vues minimum"), {target: {value: "1000"}});
   toggleFilters();
   fireEvent.click(screen.getByRole("button", {name: nextLabel}));
   await screen.findByText(/Limite de deux pages atteinte/);
   expect(new URL(fetchMock.mock.calls[1][0], "http://test").searchParams.get("min_views")).toBe("0");
-  expect(screen.getAllByRole("article")).toHaveLength(1);
+  expect(screen.getAllByRole("row").slice(1)).toHaveLength(1);
 });
 
 
