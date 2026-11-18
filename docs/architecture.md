@@ -129,3 +129,9 @@ Les retenues restent les cumuls avant déduplication ; les uniques proviennent d
 Le groupe pagination/tri perd seulement son enveloppe `.panel` et réduit ses espacements. Le nombre de pages réussies apparaît une fois dans `paginationSummary`, qui conserve ref, `tabIndex`, emplacement avant le tri et restauration conditionnelle du focus. Les handlers, effets et gardes de `VideoSearch` sont inchangés. Les liens légaux et la limitation historique de perte des résultats au retour restent inchangés.
 
 Mesures comparatives, tests et réserves : [[codex-reports/phase-06.2]] et [[validation]]. Aucun changement backend, API, filtre métier, quota, déduplication, tri ou Compose ; aucune dépendance ajoutée.
+
+## Tableau des vidéos
+
+`VideoResultsTable` reçoit les vidéos déjà triées par `VideoSearch`. Une seule structure HTML à cinq colonnes présente les résultats. Sous 768 px, les lignes se replient et les libellés des métadonnées sont visibles dans chaque entrée. Les en-têtes natifs restent dans l’arbre d’accessibilité et les outils de formatage existants conservent le jour UTC et la précision des valeurs publiques.
+
+Les liens utilisent les URL fournies par le backend. Un échec de chargement de miniature remplace localement l’image par un texte et conserve le lien. Voir [le rapport de la phase 6.3](codex-reports/phase-06.3.md) pour les mesures et le périmètre de la recette.

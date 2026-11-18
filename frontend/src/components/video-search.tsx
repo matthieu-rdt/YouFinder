@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { isSearchResponse, nextUtcDayStart, type SearchResponse } from "../lib/youtube";
 import { sortVideos, type VideoSortMode } from "../lib/video-sort";
-import { VideoCard } from "./video-card";
+import { VideoResultsTable } from "./video-results-table";
 import { SearchSummary } from "./search-summary";
 
 export function VideoSearch() {
@@ -224,14 +224,14 @@ export function VideoSearch() {
         {result && <>
           <SearchSummary result={result} uniqueCount={result.items.length} stale={balanceStale} pending={loading} />
           <div className="space-y-3" aria-label="Organisation et pagination des résultats">
-            <h2 className="text-xl font-semibold">Résultats des pages chargées</h2>
+            <h2 id="video-results-heading" className="text-xl font-semibold">Résultats des pages chargées</h2>
             <p className="text-sm text-slate-300">{result.notice}</p>
             <p ref={paginationSummary} tabIndex={-1} className="rounded focus:outline-2 focus:outline-sky-300">{pages} page(s) chargée(s) sur 2 maximum — 50 identifiants par page maximum.</p>
             <p className="text-sm text-slate-300">La page suivante utilise les critères de la recherche soumise. Pour appliquer les champs modifiés, lancez une nouvelle recherche.</p>
             {pages === 1 && result.next_page_token && <button type="button" ref={paginationButton} onClick={event => { paginationFocus.current = event.currentTarget === document.activeElement; void loadNext(); }}
               disabled={loading || !accepted || continuationBlocked || result.searches_remaining === 0}
               className="primary-button w-full sm:w-fit">Charger 50 vidéos supplémentaires</button>}
-            {pages === 1 && result.next_page_token && <p className="text-sm text-slate-300">Jusqu’à 50 identifiants supplémentaires — une tentative. Le nombre de nouvelles cartes peut être inférieur.</p>}
+            {pages === 1 && result.next_page_token && <p className="text-sm text-slate-300">Jusqu’à 50 identifiants supplémentaires — une tentative. Le nombre de nouvelles vidéos affichées peut être inférieur.</p>}
             <p>{pages === 2 ? "Limite de deux pages atteinte (100 identifiants maximum)." : !result.next_page_token ? "Fin de pagination : aucune page suivante." : result.searches_remaining === 0 ? "Plafond quotidien atteint : aucune tentative restante." : "La deuxième page est facultative et consomme une tentative."}</p>
             <label className="grid min-w-0 gap-2 sm:max-w-lg">Trier les vidéos chargées
               <select value={sortMode} onChange={event => setSortMode(event.target.value as VideoSortMode)}
@@ -244,7 +244,7 @@ export function VideoSearch() {
             <p id="local-sort-notice" className="text-sm text-slate-300">Tri local des vidéos déjà chargées, sans nouvel appel YouTube. Ce tri n’est pas une recherche exhaustive par date sur YouTube. Les dates absentes ou invalides sont placées à la fin des tris chronologiques.</p>
           </div>
           <div aria-busy={loading}>
-            {result.items.length === 0 ? <p className="panel">Aucune vidéo ne correspond aux critères parmi les vidéos examinées.</p> : <ol className="mt-5 grid gap-5 sm:grid-cols-2">{displayedVideos.map(video => <li className="min-w-0" key={video.id}><VideoCard video={video} /></li>)}</ol>}
+            {result.items.length === 0 ? <p className="panel">Aucune vidéo ne correspond aux critères parmi les vidéos examinées.</p> : <VideoResultsTable videos={displayedVideos} labelledBy="video-results-heading" />}
           </div>
         </>}
       </div>

@@ -59,7 +59,7 @@ La continuation utilise les critères de la recherche soumise ; modifier les cha
 
 Le sélecteur **« Trier les vidéos chargées »** propose l’ordre initial de pertinence YouTube, la date décroissante (plus récentes d’abord) et la date croissante (plus anciennes d’abord). Il trie uniquement les vidéos déjà chargées, selon leur date de publication enrichie, sans nouvel appel API ni consommation de quota. Il ne s’agit pas d’une recherche exhaustive par date sur YouTube.
 
-Les dates absentes ou invalides restent en fin des deux tris chronologiques, dans leur ordre initial ; les dates égales conservent également l’ordre initial. Le tri compare les instants avec fuseau et fractions de seconde, tandis que les cartes affichent le jour UTC. Le mode choisi est conservé après la deuxième page, une erreur ou une nouvelle recherche, et revient à la pertinence après rechargement complet. Aucun stockage navigateur n’est utilisé. Le tri ne change ni les filtres, ni les doublons masqués, ni les compteurs.
+Les dates absentes ou invalides restent en fin des deux tris chronologiques, dans leur ordre initial ; les dates égales conservent également l’ordre initial. Le tri compare les instants avec fuseau et fractions de seconde, tandis que le tableau affiche le jour UTC. Le mode choisi est conservé après la deuxième page, une erreur ou une nouvelle recherche, et revient à la pertinence après rechargement complet. Aucun stockage navigateur n’est utilisé. Le tri ne change ni les filtres, ni les doublons masqués, ni les compteurs.
 
 Le plafond interne vaut **20 tentatives par jour**, partagé par toute l’application et configurable avec `YOUTUBE_DAILY_SEARCH_LIMIT` (entier positif ou nul ; zéro bloque les recherches). Chaque page demandée réserve une tentative. Chaque tentative réservée avant l’appel Google reste comptée, même si Google renvoie une erreur ou si la connexion échoue. Les entrées invalides et l’absence de clé ne consomment rien. Aucun retry automatique, aucune recherche à chaque frappe.
 
@@ -67,7 +67,7 @@ Un seul panneau présente quatre indicateurs : vidéos examinées, retenues avan
 
 Le solde numérique exact et le plafond quotidien remplacent la jauge quotidienne. Ils concernent le plafond interne YouFinder, distinct du quota Google, sur la journée Europe/Paris. Avant une réponse valide, le solde est inconnu ; pendant une continuation, il est qualifié de dernier solde connu. Après une erreur de requête, ce dernier solde reste indiqué, potentiellement périmé ; la prochaine réponse valide le remplace. Aucun décompte local ni rafraîchissement automatique. Un plafond nul et un solde nul sont affichés explicitement.
 
-Les filtres avancés restent disponibles dans leur groupe accessible repliable. Le sélecteur de tri et l’unique bouton de continuation se trouvent avant les cartes, près du résumé de pagination. Les cartes et contrôles s’adaptent aux petits écrans ; les annonces de chargement sont séparées de la liste pour éviter sa relecture complète.
+Les filtres avancés restent disponibles dans leur groupe accessible repliable. Le sélecteur de tri et l’unique bouton de continuation se trouvent avant le tableau, près du résumé de pagination. Le tableau compare les vidéos par chaîne, vues publiques, abonnés publics, publication UTC et durée. Sur petit écran, la miniature reste à gauche du titre et de la chaîne, et les métadonnées libellées passent dessous. Les annonces de chargement restent séparées des résultats.
 
 Le compteur contient uniquement une date et un nombre, dans `backend/.state/search-quota.json`, protégé par verrou Linux et écriture atomique. Il survit aux rechargements et recréations des conteneurs grâce au montage existant `./backend:/app`, sans nouveau volume Docker. Il est ignoré par Git et exclu du contexte de build. En cas de corruption ou d’accès impossible, la recherche est bloquée. Ne pas supprimer ce dossier pour contourner le plafond. Ce mécanisme vise une installation locale unique sur système de fichiers local, pas plusieurs serveurs indépendants.
 
@@ -118,7 +118,7 @@ Le proxy utilise par défaut `http://127.0.0.1:8000`. `BACKEND_INTERNAL_URL` cha
 - `backend/app/youtube.py` : client officiel HTTPX et assemblage des données publiques.
 - `backend/app/schemas.py` : contrat de recherche et de réponse.
 - `backend/app/quota.py` : compteur quotidien local.
-- `frontend/src/components/` : formulaire explicite et cartes vidéo.
+- `frontend/src/components/` : formulaire explicite et tableau des vidéos.
 - `frontend/src/lib/video-sort.ts` : tri local pur et stable des publications enrichies.
 - `frontend/src/app/confidentialite/` et `conditions/` : informations utilisateur.
 - `docs/architecture.md`, `docs/youtube-api.md`, `docs/incidents.md` : documentation ouvrable dans Obsidian.
